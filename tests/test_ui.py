@@ -52,6 +52,19 @@ class UITests(unittest.TestCase):
         self.at.run()
         self.assertEqual(len(self.at.get("component_instance")),0)
         self.assertTrue(self.at.warning)
+    def test_component_event_returns_response_without_extra_rerun(self):
+        self.login("admin_user","Test-admin-password!123")
+        version=self.component_args()["version"]
+        event={"id":"heartbeat-test","action":"heartbeat","activity":time.time()}
+        self.at.session_state["exact_website_ui"]=event
+        self.at.run()
+        args=self.component_args()
+        self.assertEqual(args["response"],{"id":"heartbeat-test","body":{"ok":True}})
+        self.assertEqual(args["version"],version)
+        self.assertEqual(args["data"]["filename"],"synthetic-test.xlsx")
+        self.at.run()
+        self.assertEqual(self.component_args()["response"],args["response"])
+        self.assertEqual(len(self.at.exception),0)
     def test_wrong_password_cannot_render_database(self):
         self.at.run();self.at.text_input(key="login_username").set_value("viewer_user")
         self.at.text_input(key="login_password").set_value("wrong")

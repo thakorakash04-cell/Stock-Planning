@@ -56,30 +56,28 @@ def render_exact_workspace(store,actor,identity):
     header[data-testid="stHeader"],section[data-testid="stSidebar"],div[data-testid="stToolbar"],#MainMenu,footer{display:none!important}
     .stAppViewContainer,.stMain,.block-container{padding:0!important;margin:0!important;max-width:none!important}
     .stMainBlockContainer{padding:0!important;max-width:none!important}
+    .stMain{height:100dvh;overflow:hidden!important}
+    div[data-testid="stElementContainer"]:has(iframe){line-height:0}
     div[data-testid="stVerticalBlock"]{gap:0!important}
     div[data-testid="stElementContainer"]:has(iframe){width:100%!important}
     iframe[title="exact_ui.stock_planning_web_ui"]{width:100%;border:0}
     </style>""",unsafe_allow_html=True)
+    # Read the existing widget value before rendering. A component event already
+    # reruns Streamlit; handling it here returns the response in that same run.
+    event=st.session_state.get("exact_website_ui")
+    if isinstance(event,dict) and isinstance(event.get("id"),str) and event["id"]!=st.session_state.get("_ui_last_request"):
+        st.session_state._ui_last_request=event["id"]
+        try:
+            result=handle_request(store,actor,event)
+            if result.get("logout"):
+                st.session_state.clear();st.rerun()
+            st.session_state._ui_response={"id":event["id"],"body":result}
+        except (ValueError,AccessDenied) as exc:
+            st.session_state._ui_response={"id":event["id"],"body":None,"error":str(exc)}
+        except Exception:
+            st.session_state._ui_response={"id":event["id"],"body":None,"error":"The request failed. Check the workbook or database connection; your previous data is unchanged."}
     current=store.get_dataset(actor)
     data,tables,version=ui_payload(current)
-    force=st.session_state.pop("_ui_force_data",False)
-    changed=st.session_state.get("_ui_sent_version")!=version or force
-    st.session_state._ui_sent_version=version
-    event=_component(data=data if changed else None,tables=tables if changed else None,user=identity["username"],role=identity["role"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
-    if not isinstance(event,dict) or not isinstance(event.get("id"),str):return
-    if event["id"]==st.session_state.get("_ui_last_request"):return
-    st.session_state._ui_last_request=event["id"]
-    if event.get("action")=="ack":
-        st.session_state.pop("_ui_response",None)
-        return
-    try:
-        result=handle_request(store,actor,event)
-        if result.get("logout"):
-            st.session_state.clear();st.rerun()
-        st.session_state._ui_response={"id":event["id"],"body":result}
-        if event.get("action") in ("upload","refresh"):st.session_state._ui_force_data=True
-    except (ValueError,AccessDenied) as exc:
-        st.session_state._ui_response={"id":event["id"],"body":None,"error":str(exc)}
-    except Exception:
-        st.session_state._ui_response={"id":event["id"],"body":None,"error":"The request failed. Check the workbook or database connection; your previous data is unchanged."}
-    st.rerun()
+    # Stable arguments also let a newly mounted iframe recover without issuing
+    # refresh requests. The browser applies data only when its version changes.
+    _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
