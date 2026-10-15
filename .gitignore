@@ -1,0 +1,16 @@
+.streamlit/secrets.toml
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
+*.xlsx
+*.xls
+*.stock.zip
+__pycache__/
+.pytest_cache/
+.venv/
+uploads/
+data/
