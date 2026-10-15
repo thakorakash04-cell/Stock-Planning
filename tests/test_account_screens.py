@@ -57,6 +57,7 @@ class AccountScreenTests(unittest.TestCase):
         next(b for b in at.button if b.label=='← Back to workspace').click().run()
         self.assertEqual(len(at.exception),0)
         self.assertEqual(len(at.get('component_instance')),1)
+        self.assertTrue(any('[data-stale="true"]:has(iframe' in m.value and 'opacity:1!important' in m.value for m in at.markdown))
 
     def test_viewer_cannot_open_admin_console(self):
         at=self.login('viewer_user','Initial-viewer-password!123')

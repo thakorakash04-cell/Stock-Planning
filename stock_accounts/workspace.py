@@ -105,6 +105,9 @@ def render_exact_workspace(store,actor,identity):
     body:has(iframe[title$="stock_planning_web_ui"]) div[data-testid="stVerticalBlock"]{gap:0!important}
     body:has(iframe[title$="stock_planning_web_ui"]) div[data-testid="stElementContainer"]:has(iframe){width:100%!important}
     body:has(iframe[title$="stock_planning_web_ui"]) iframe[title$="stock_planning_web_ui"]{width:100%;border:0}
+    /* The iframe owns its loading state. Streamlit's stale fade makes a
+       live dashboard appear blank during heartbeat, logging and upload RPCs. */
+    div[data-testid="stElementContainer"][data-stale="true"]:has(iframe[title$="stock_planning_web_ui"]){opacity:1!important;filter:none!important;transition:none!important}
     </style>""",unsafe_allow_html=True)
     # Read the existing widget value before rendering. A component event already
     # reruns Streamlit; handling it here returns the response in that same run.
