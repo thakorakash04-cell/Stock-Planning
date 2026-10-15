@@ -1,0 +1,35 @@
+// Zoho Cliq > Bots > your bot > Message Handler.
+// Store the gateway secret only in this restricted handler or a secure Zoho connection.
+// Replace the two placeholders after deploying the backend.
+payload = Map();
+payload.put("message", message);
+payload.put("user_id", user.get("id").toString());
+payload.put("organization_id", user.get("organization_id").toString());
+chatType = chat.get("chat_type");
+if(chatType == null)
+{
+    chatType = chat.get("type");
+}
+if(chatType != "bot")
+{
+    return {"text":"Please send a direct message to this bot. Group and channel queries are disabled."};
+}
+payload.put("chat_type", chatType);
+headers = Map();
+headers.put("X-API-Key", "REPLACE_WITH_GATEWAY_SECRET");
+headers.put("Content-Type", "application/json");
+try
+{
+    result = invokeurl
+    [
+        url :"https://YOUR-BACKEND-HOST/chat"
+        type :POST
+        parameters:payload.toString()
+        headers:headers
+    ];
+    return {"text":ifnull(result.get("text"),"The backend did not return a reply. Contact the administrator.")};
+}
+catch (e)
+{
+    return {"text":"The backend is unavailable or waking up. Try again shortly."};
+}
