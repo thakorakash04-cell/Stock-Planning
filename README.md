@@ -9,8 +9,8 @@ A Streamlit Cloud version of the Stock & Planning workspace, with username/passw
 3. Create a persistent PostgreSQL database (for example, Supabase or Neon). For Community Cloud, use a provider connection/pooler reachable over IPv4. Copy the PostgreSQL connection string, with SSL enabled.
 4. In Advanced settings → Secrets, paste the three settings from `secrets.example.toml` and replace **every placeholder**. Use your own admin username (for example `thakorakash04-cell`) and a unique password of at least 12 characters. Do not commit the actual secrets to GitHub.
 5. Deploy. Sign in with the admin username/password you configured.
-6. Open **Upload workbook**, upload your refreshed `Master File.xlsx`, and press **Validate and replace shared data**.
-7. Open **Manage users** to create viewer usernames and passwords. Share those credentials privately, along with the Streamlit URL.
+6. Use **Update workbook** at the top right of the dashboard and select your refreshed `Master File.xlsx`.
+7. Open **Manage users** in the dashboard sidebar to create viewer usernames and passwords. Share those credentials privately, along with the Streamlit URL.
 
 No default password, company workbook, extracted model, or existing user credentials are included in this public repository. Your workbook is uploaded inside the protected app and stored in your PostgreSQL database. The app does not write uploads back to GitHub.
 
@@ -35,11 +35,11 @@ The database user needs permission to create tables and read/write them. `accoun
 | Open underlying model tables | Yes | Yes |
 | Upload or replace the shared workbook | Yes | No |
 | Create, disable, enable, reset viewer accounts | Yes | No |
-| Download/export data files through the app | No | No |
+| Export visible/filtered data through original table controls | Yes | No |
 
-User creation, password resets, account changes, data reads and data writes are authorized server-side. Passwords are stored as salted PBKDF2-SHA256 hashes with 600,000 iterations. Five failed attempts lock an account for 15 minutes. Sessions are checked against the database on every interaction and expire after 30 minutes idle or eight hours total. Disabling or resetting a viewer revokes their existing sessions.
+User creation, password resets, account changes, data reads and data writes are authorized server-side. Passwords are stored as salted PBKDF2-SHA256 hashes with 600,000 iterations. Five failed attempts lock an account for 15 minutes. Every server action and the 60-second heartbeat recheck account access. Sessions expire after 30 minutes without interface activity or eight hours total. Disabling or resetting a viewer revokes their existing sessions.
 
-Streamlit's `client.disableDataExport = true` removes built-in CSV export and clipboard copying for read-only dataframes. Static serving is disabled and this app supplies no download buttons or raw-file links. This controls application export features; authorized users can still photograph/screenshoot the screen or capture data their browser receives. No website can make visible data impossible to copy. Do not give viewers GitHub/Streamlit/database owner credentials.
+Streamlit's `client.disableDataExport = true` removes built-in CSV export and clipboard copying for read-only dataframes. Static serving is disabled; viewer accounts receive no download controls or raw-file links. The original table export controls are available only to administrators. This controls application export features; authorized users can still photograph/screenshoot the screen or capture data their browser receives. No website can make visible data impossible to copy. Do not give viewers GitHub/Streamlit/database owner credentials.
 
 ## Workbook views
 
@@ -59,7 +59,7 @@ The original worksheet layout is expected:
 - Purchasing views preserve the named worksheets' saved values, including blank cells, negative balances and the unmatched-component row.
 - Segment options come from **Source.Name** in the material/BOM tables. Shared components inherit their parent products' segments; no marketing `Segment` fallback is used. The supplied workbook's five categories are General Wound Care, Advance Wound Care, Ostomy Care, Energy Devices and Designer Cap.
 - Select a cell to open a full-width record page. All related embedded tables, columns, components, parent products, batches and periods are available. **Entire workbook** removes the material restriction.
-- Use **Filters, columns and totals** for text/numeric/value filters, hiding/unhiding fields and optional sums. Use the dataframe toolbar for full screen. Table preferences remain within the current Streamlit session.
+- The original ChatGPT Sites React interface is used directly inside Streamlit: the same seven-item sidebar, light-gray workspace, table headers, per-column filter controls, Columns and Totals menus, grouping, and full-window record screens. Use the table's **Full screen** button at the upper right. Column/total preferences remain per table in the browser.
 - The four KPI cards are omitted.
 
 ## Excel refresh and embedded models
@@ -94,4 +94,20 @@ Local SQLite is **not durable on Streamlit Cloud**. Cloud deployments should use
 
 ## Validation
 
-Automated checks cover password authentication/lockout, admin/viewer write restrictions, disabled-session revocation, persistent saved data, workbook extraction and forecast aggregation, Source.Name segment filtering, and Streamlit login/role UI rendering. PostgreSQL behavior requires a real deployment connection; local automated storage tests use SQLite with the same schema/authorization layer.
+Automated checks cover password authentication/lockout, admin/viewer write restrictions, disabled-session revocation, persistent saved data, workbook extraction and forecast aggregation, Source.Name segment filtering, Streamlit login/role UI rendering, and server-side authorization of component requests. PostgreSQL behavior requires a real deployment connection; local automated storage tests use SQLite with the same schema/authorization layer.
+
+
+## Frontend source and build
+
+`frontend/src/` contains the original Sites dashboard components, with a small Streamlit message bridge replacing the Sites endpoints. `frontend_dist/` contains the built static component. **Streamlit Cloud does not need Node or an extra build step.** No workbook records or secrets are built into these assets.
+
+For frontend development with Node 22+:
+
+```bash
+cd frontend
+npm install
+npm run check
+npm run build
+```
+
+Commit both frontend source and the updated `frontend_dist` build. Keep existing Streamlit Secrets and the PostgreSQL database unchanged when updating the UI. Login and account checks remain in Python. Client-side filtering stays responsive; a periodic server heartbeat checks access and refreshes changed datasets.

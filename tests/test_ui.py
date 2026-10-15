@@ -26,22 +26,32 @@ class UITests(unittest.TestCase):
         next(b for b in self.at.button if b.label=="Sign in").click().run()
         self.assertEqual(len(self.at.exception),0)
         self.assertEqual(len(self.at.error),0,[e.value for e in self.at.error])
-    def test_viewer_sees_data_without_admin_widgets(self):
+    def component_args(self):
+        import json
+        components=self.at.get("component_instance")
+        self.assertEqual(len(components),1)
+        return json.loads(components[0].proto.json_args)
+    def test_viewer_sees_original_ui_with_viewer_role(self):
         self.login("viewer_user","Test-viewer-password!123")
-        nav=next(r for r in self.at.radio if r.label=="Workspace")
-        self.assertEqual(nav.options,["Dashboard"])
-        self.assertTrue(len(self.at.dataframe)>0)
+        args=self.component_args()
+        self.assertEqual(args["role"],"viewer")
+        self.assertEqual(args["data"]["sheets"][0]["rows"][0][0],"SKU-1")
         self.assertEqual(len(self.at.get("file_uploader")),0)
         self.assertEqual(len(self.at.get("download_button")),0)
-    def test_admin_can_open_upload_and_manage_users(self):
+    def test_admin_receives_original_ui_with_admin_role(self):
         self.login("admin_user","Test-admin-password!123")
-        nav=next(r for r in self.at.radio if r.label=="Workspace")
-        self.assertIn("Upload workbook",nav.options)
-        nav.set_value("Upload workbook").run()
-        self.assertEqual(len(self.at.get("file_uploader")),1)
-        next(r for r in self.at.radio if r.label=="Workspace").set_value("Manage users").run()
-        self.assertTrue(any(b.label=="Create viewer" for b in self.at.button))
-        self.assertEqual(len(self.at.error),0,[e.value for e in self.at.error])
+        args=self.component_args()
+        self.assertEqual(args["role"],"admin")
+        self.assertEqual(args["user"],"admin_user")
+        self.assertEqual(len(self.at.error),0)
+    def test_revoked_session_removes_dashboard_component(self):
+        self.login("viewer_user","Test-viewer-password!123")
+        store=Store(self.url)
+        admin=store.login("admin_user","Test-admin-password!123")
+        store.update_viewer(admin,"viewer_user",active=False)
+        self.at.run()
+        self.assertEqual(len(self.at.get("component_instance")),0)
+        self.assertTrue(self.at.warning)
     def test_wrong_password_cannot_render_database(self):
         self.at.run();self.at.text_input(key="login_username").set_value("viewer_user")
         self.at.text_input(key="login_password").set_value("wrong")
@@ -49,3 +59,4 @@ class UITests(unittest.TestCase):
         self.assertEqual(len(self.at.dataframe),0)
         self.assertEqual(len(self.at.get("file_uploader")),0)
         self.assertTrue(self.at.error)
+        self.assertEqual(len(self.at.get("component_instance")),0)
