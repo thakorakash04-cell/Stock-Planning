@@ -34,7 +34,7 @@ class BridgeTests(unittest.TestCase):
         self.store.update_permissions(self.admin,'viewer_user',{'download':True,'update_data':True})
         viewer=self.store.login('viewer_user','Test-viewer-password!123')
         self.assertTrue(handle_request(self.store,viewer,{'action':'export'})['ok'])
-        with patch('exact_ui.read_upload',return_value={'sheets':[],'tables':[]}):
+        with patch('stock_accounts.workspace.read_upload',return_value={'sheets':[],'tables':[]}):
             answer=handle_request(self.store,viewer,{'action':'upload','filename':'fixture.xlsx','content':base64.b64encode(b'fixture').decode()})
         self.assertTrue(answer['ok'])
         self.assertEqual(self.store.get_dataset(viewer)['filename'],'fixture.xlsx')

@@ -43,6 +43,19 @@ class AccountScreenTests(unittest.TestCase):
             self.assertEqual(len(at.exception),0)
             self.assertTrue(any(x.label=='Username' for x in at.text_input))
             self.assertIsNotNone(Store(self.url).login(username,new))
+    def test_manage_users_opens_in_one_run_and_returns_to_dashboard(self):
+        at=self.login('admin_user','Initial-admin-password!123')
+        at.session_state['exact_website_ui']={'id':uuid.uuid4().hex,'action':'open_admin'}
+        with patch('streamlit.rerun',side_effect=AssertionError('Navigation must not trigger an extra rerun')):
+            at.run()
+        self.assertEqual(len(at.exception),0)
+        self.assertTrue(any(x.value=='Access log' for x in at.subheader))
+        self.assertTrue(any(x.label=='New viewer username' for x in at.text_input))
+        self.assertEqual(len(at.get('component_instance')),0)
+        next(b for b in at.button if b.label=='← Back to workspace').click().run()
+        self.assertEqual(len(at.exception),0)
+        self.assertEqual(len(at.get('component_instance')),1)
+
     def test_viewer_cannot_open_admin_console(self):
         at=self.login('viewer_user','Initial-viewer-password!123')
         if IS_STOCK:

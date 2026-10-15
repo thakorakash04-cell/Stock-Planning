@@ -17,3 +17,5 @@ The administrator can also change their own password on-screen. That change surv
 ## Deployment
 
 No new Secrets are required. Keep `DATABASE_URL`, `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Database tables are migrated automatically without replacing existing accounts or datasets. Each app keeps separate accounts/logs, even if the PostgreSQL database is shared. Reboot each Streamlit app once after the code updates. Native toolbar export is disabled; app export buttons are permission-gated. Visible data can still be copied or captured.
+
+Account navigation is dispatched directly instead of waiting for the dashboard RPC queue. Native account pages render in the same server request with normal scrolling. The live app imports its isolated stock_accounts package so cached legacy storage/exact_ui/account helpers cannot be mixed with new entry-point code. Reboot once after deployment; no Secrets or database changes are needed.

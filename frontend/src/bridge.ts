@@ -12,6 +12,10 @@ export const isAdmin=()=>state?.role==='admin';
 export const can=(permission:string)=>isAdmin()||state?.permissions?.[permission]===true;
 export async function authorizeExport(){try{await rpc('export');return true}catch(e){alert(e instanceof Error?e.message:String(e));return false}}
 export function rpc(action:string,payload:Record<string,unknown>={}):Promise<any>{const work=()=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();waiting.set(id,{resolve,reject});send('streamlit:setComponentValue',{value:{id,action,activity:lastActivity,...payload},dataType:'json'});setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(new Error('Request timed out. Please retry.'))}},120000)});const result=queue.then(work);queue=result.catch(()=>{});return result;}
+// Navigation must not wait behind an export, heartbeat or timed-out RPC.
+export function openAccount(action:'open_admin'|'open_password'){
+ send('streamlit:setComponentValue',{value:{id:crypto.randomUUID(),action,activity:lastActivity},dataType:'json'});
+}
 export async function uploadWorkbook(file:File){const bytes=new Uint8Array(await file.arrayBuffer());let raw='';for(let i=0;i<bytes.length;i+=32768)raw+=String.fromCharCode(...bytes.subarray(i,i+32768));return rpc('upload',{filename:file.name,content:btoa(raw)})}
 export function startBridge(onReady:(args:Args)=>void){
  readyListener=onReady;

@@ -1,1 +1,24 @@
-{"name":"stock-planning-ui","private":true,"version":"1.0.0","type":"module","scripts":{"build":"vite build","check":"tsc --noEmit"},"dependencies":{"react":"19.2.6","react-dom":"19.2.6","lucide-react":"1.31.0"},"devDependencies":{"vite":"8.0.13","@vitejs/plugin-react":"6.0.2","typescript":"5.9.3","@types/react":"19.2.14","@types/react-dom":"19.2.3","@types/node":"22.19.19"}}
+{
+  "name": "stock-planning-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "test": "node tests/account-navigation.cjs"
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "lucide-react": "1.31.0"
+  },
+  "devDependencies": {
+    "vite": "8.0.13",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "5.9.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/node": "22.19.19"
+  }
+}

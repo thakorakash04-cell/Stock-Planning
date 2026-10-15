@@ -3,11 +3,11 @@ import os,time
 from datetime import datetime,timezone
 import pandas as pd
 import streamlit as st
-from storage import Store,Actor,AccessDenied
+from stock_accounts.store import Store,Actor,AccessDenied
 from workbook import read_upload,TITLES,SPECS,forecast_summary,segment_map,segment_filter,related_tables
 from tables import table_controls
-from exact_ui import render_exact_workspace
-from workspace_auth import user_page as account_admin_page,password_page
+from stock_accounts.workspace import render_exact_workspace,process_account_navigation,account_page_style
+from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 
 st.set_page_config(page_title="Stock & Planning",page_icon="📦",layout="wide")
 st.markdown("""<style>.block-container{padding-top:2rem;max-width:1900px}h1,h2,h3{color:#285e4c}div[data-testid='stMetric']{display:none}.stButton>button{border-radius:7px}div[data-testid='stDataFrame']{border:1px solid #e0e8e3;border-radius:8px}</style>""",unsafe_allow_html=True)
@@ -165,7 +165,7 @@ def main():
         st.title("Stock & Planning — deployment setup")
         st.info("The owner must configure DATABASE_URL, ADMIN_USERNAME and ADMIN_PASSWORD in Streamlit Cloud Secrets. See README.md and secrets.example.toml in the repository. No default password is enabled.")
         st.stop()
-    try:store=initialize(cfg["DATABASE_URL"],cfg["ADMIN_USERNAME"],cfg["ADMIN_PASSWORD"])
+    try:store=initialize_account_store(cfg["DATABASE_URL"],cfg["ADMIN_USERNAME"],cfg["ADMIN_PASSWORD"])
     except Exception:
         st.error("Cannot initialize the account database. Check the database connection and admin settings in Streamlit Secrets.");st.stop()
     actor=st.session_state.get("actor")
@@ -178,7 +178,9 @@ def main():
         store.log_event(actor,"session_expired")
         sign_out()
     identity=store.identity(actor)
+    process_account_navigation(store,actor)
     if st.session_state.get('_account_page'):
+        account_page_style()
         st.session_state.last_active=now
         if st.button('← Back to workspace'):
             del st.session_state._account_page;st.rerun()
