@@ -1,0 +1,58 @@
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+import streamlit as st
+import pytest
+from stock_accounts.store import Store,AccessDenied
+from stock_accounts.workspace import handle_request
+
+@pytest.fixture
+def accounts():
+    with tempfile.TemporaryDirectory() as folder:
+        store=Store('sqlite:///'+str(Path(folder)/'db'));store.bootstrap_admin('admin_user','Test-admin-password!123');admin=store.login('admin_user','Test-admin-password!123')
+        store.create_viewer(admin,'viewer_user','Test-viewer-password!123');viewer=store.login('viewer_user','Test-viewer-password!123')
+        store.save_dataset(admin,'stock.xlsx',{'sheets':[{'name':'Stock','headers':['Material','Qty'],'rows':[['A',3],['B',9]]}],'tables':[]})
+        with patch('streamlit.session_state',{}):yield store,admin,viewer
+
+def test_permission_consent_revision_and_context_are_enforced(accounts):
+    store,admin,viewer=accounts
+    status=handle_request(store,viewer,{'action':'ai_status'})
+    assert 'key' not in status and 'api_key' not in status
+    event={'action':'ask_ai','version':status['version'],'question':'Why this value?','context':{'table':'Stock','column':'Qty','row':['A',3]}}
+    with patch('grounded_ai.generate') as provider:
+        with pytest.raises(ValueError,match='sharing'):handle_request(store,viewer,event)
+        with pytest.raises(ValueError,match='changed'):handle_request(store,viewer,{**event,'consent':True,'version':'stale'})
+        provider.assert_not_called()
+    with patch('grounded_ai.settings',return_value=('key','model')),patch('grounded_ai.generate') as provider:
+        with pytest.raises(ValueError,match='selected record'):handle_request(store,viewer,{**event,'consent':True,'context':{'table':'Stock','column':'Qty','row':['A',999]}})
+        provider.assert_not_called()
+    store.update_permissions(admin,'viewer_user',{'use_tools':False});viewer=store.login('viewer_user','Test-viewer-password!123')
+    with patch('grounded_ai.generate') as provider:
+        for action in ['ai_status','ask_ai','ai_clear']:
+            with pytest.raises(AccessDenied):handle_request(store,viewer,{**event,'action':action,'consent':True})
+        provider.assert_not_called()
+
+def test_success_keeps_private_history_and_generic_audit_then_clear(accounts):
+    store,admin,viewer=accounts
+    status=handle_request(store,viewer,{'action':'ai_status'})
+    event={'action':'ask_ai','version':status['version'],'question':'Private question','context':None,'consent':True}
+    with patch('stock_accounts.assistant.ask',return_value={'answer':'Private answer','evidence':[]}) as ask:
+        assert handle_request(store,viewer,event)['answer']=='Private answer'
+        handle_request(store,viewer,{**event,'question':'follow up'})
+        assert ask.call_args.args[2][0]['text']=='Private question'
+        handle_request(store,viewer,{'action':'ai_clear','context':None})
+        handle_request(store,viewer,event)
+        assert ask.call_args.args[2]==[]
+    logs=store.access_log(admin)
+    assert any(e['action']=='tool_use' and e['resource']=='Ask AI' for e in logs)
+    assert 'Private' not in str(logs)
+
+def test_forecast_product_totals_deduct_stock_once(accounts):
+    from stock_accounts.assistant import stock_tables
+    store,admin,viewer=accounts
+    sheets=[{'name':'Empty '+str(i),'headers':['Material'],'rows':[]} for i in range(4)]
+    sheets.append({'name':'Forecast Planning','headers':['Material','Description','Month','Other','Forecast','Transfer','Stock'],'rows':[['A','Item','Jan',None,10,2,3],['A','Item','Feb',None,20,4,3]]})
+    store.save_dataset(admin,'forecast.xlsx',{'sheets':sheets,'tables':[]})
+    tables,version,name=stock_tables(store,viewer)
+    summary=next(t for t in tables if t['name']=='Forecast Planning — product totals')
+    assert summary['rows']==[['A','Item',30.0,6.0,3.0,21.0]]

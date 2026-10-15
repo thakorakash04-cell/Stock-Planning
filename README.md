@@ -120,3 +120,7 @@ See [ACCOUNT_ACCESS.md](ACCOUNT_ACCESS.md) for administrator permissions, persis
 ## One Zoho Cliq bot for all four apps
 
 See [zoho_bot/README.md](zoho_bot/README.md) for the standalone unified backend, Docker deployment, Zoho Message Handler and account mappings. Streamlit does not need to stay awake for the separately hosted backend to answer.
+
+## Ask AI
+
+See [ASK_AI.md](ASK_AI.md) for the Gemini Secrets setup, data sharing, query evidence and permissions.
