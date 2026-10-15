@@ -199,6 +199,11 @@ class Store:
             self.require(db,actor,permission="update_data")
             self.run(db,"INSERT INTO datasets(id,payload,filename,version,uploaded_by,updated_at) VALUES('current',?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,filename=excluded.filename,version=excluded.version,uploaded_by=excluded.uploaded_by,updated_at=excluded.updated_at",(payload,filename,version,actor.username,time.time()))
             self._log(db,actor.username,"data_updated",session_id=actor.session_id)
+    def dataset_revision(self,actor):
+        with self.transaction() as db:
+            self.require(db,actor)
+            row=self.run(db,"SELECT version,updated_at FROM datasets WHERE id='current'").fetchone()
+            return (row["version"],row["updated_at"]) if row else None
     def get_dataset(self,actor):
         with self.transaction() as db:
             self.require(db,actor);row=self.run(db,"SELECT * FROM datasets WHERE id='current'").fetchone()

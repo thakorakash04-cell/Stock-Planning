@@ -52,6 +52,8 @@ class AccountScreenTests(unittest.TestCase):
         self.assertTrue(any(x.value=='Access log' for x in at.subheader))
         self.assertTrue(any(x.label=='New viewer username' for x in at.text_input))
         self.assertEqual(len(at.get('component_instance')),0)
+        self.assertIn("key='account_scroll'",Path('app.py').read_text())
+        self.assertEqual(len(at.dataframe),2)
         next(b for b in at.button if b.label=='← Back to workspace').click().run()
         self.assertEqual(len(at.exception),0)
         self.assertEqual(len(at.get('component_instance')),1)

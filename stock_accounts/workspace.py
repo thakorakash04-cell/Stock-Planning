@@ -17,6 +17,16 @@ def ui_payload(current):
         return {"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
     return {"filename":"No workbook uploaded yet","updatedAt":None,"asOf":"—","sheets":[{"name":s[0],"headers":["Material","Description"],"rows":[]} for s in SPECS],"segmentMap":{}},[],"empty"
 
+def workspace_payload(store,actor):
+    # Check authorization and the shared version even when a session has cached data.
+    revision=store.dataset_revision(actor)
+    key=(actor.username,actor.session_id,revision)
+    cached=st.session_state.get('_workspace_payload')
+    if not cached or cached[0]!=key:
+        cached=(key,ui_payload(store.get_dataset(actor)))
+        st.session_state['_workspace_payload']=cached
+    return cached[1]
+
 def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
@@ -70,7 +80,9 @@ def process_account_navigation(store,actor):
 
 def account_page_style():
     st.markdown("""<style>
-    .stMain{height:auto!important;min-height:100dvh;overflow:auto!important}
+    .stAppViewContainer{height:100dvh!important;overflow:hidden!important}
+    .stMain{height:100dvh!important;min-height:0!important;overflow-y:auto!important}
+    .st-key-account_scroll{max-height:calc(100dvh - 150px)!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable}
     .stMainBlockContainer,.block-container{max-width:1500px!important;margin:0 auto!important;padding:2rem!important}
     div[data-testid='stVerticalBlock']{gap:1rem!important}
     header[data-testid='stHeader']{display:block!important}
@@ -80,14 +92,14 @@ def render_exact_workspace(store,actor,identity):
     # Login remains Streamlit-native; after sign-in there is only one sidebar:
     # the original website's sidebar inside the full-width component.
     st.markdown("""<style>
-    header[data-testid="stHeader"],section[data-testid="stSidebar"],div[data-testid="stToolbar"],#MainMenu,footer{display:none!important}
-    .stAppViewContainer,.stMain,.block-container{padding:0!important;margin:0!important;max-width:none!important}
-    .stMainBlockContainer{padding:0!important;max-width:none!important}
-    .stMain{height:100dvh;overflow:hidden!important}
-    div[data-testid="stElementContainer"]:has(iframe){line-height:0}
-    div[data-testid="stVerticalBlock"]{gap:0!important}
-    div[data-testid="stElementContainer"]:has(iframe){width:100%!important}
-    iframe[title$="stock_planning_web_ui"]{width:100%;border:0}
+    body:has(iframe[title$="stock_planning_web_ui"]) header[data-testid="stHeader"],body:has(iframe[title$="stock_planning_web_ui"]) section[data-testid="stSidebar"],body:has(iframe[title$="stock_planning_web_ui"]) div[data-testid="stToolbar"],body:has(iframe[title$="stock_planning_web_ui"]) #MainMenu,body:has(iframe[title$="stock_planning_web_ui"]) footer{display:none!important}
+    body:has(iframe[title$="stock_planning_web_ui"]) .stAppViewContainer,body:has(iframe[title$="stock_planning_web_ui"]) .stMain,body:has(iframe[title$="stock_planning_web_ui"]) .block-container{padding:0!important;margin:0!important;max-width:none!important}
+    body:has(iframe[title$="stock_planning_web_ui"]) .stMainBlockContainer{padding:0!important;max-width:none!important}
+    body:has(iframe[title$="stock_planning_web_ui"]) .stMain{height:100dvh;overflow:hidden!important}
+    body:has(iframe[title$="stock_planning_web_ui"]) div[data-testid="stElementContainer"]:has(iframe){line-height:0}
+    body:has(iframe[title$="stock_planning_web_ui"]) div[data-testid="stVerticalBlock"]{gap:0!important}
+    body:has(iframe[title$="stock_planning_web_ui"]) div[data-testid="stElementContainer"]:has(iframe){width:100%!important}
+    body:has(iframe[title$="stock_planning_web_ui"]) iframe[title$="stock_planning_web_ui"]{width:100%;border:0}
     </style>""",unsafe_allow_html=True)
     # Read the existing widget value before rendering. A component event already
     # reruns Streamlit; handling it here returns the response in that same run.
@@ -106,8 +118,7 @@ def render_exact_workspace(store,actor,identity):
         except Exception:
             st.session_state._ui_response={"id":event["id"],"body":None,"error":"The request failed. Check the workbook or database connection; your previous data is unchanged."}
     store.record_access(actor,"Workspace")
-    current=store.get_dataset(actor)
-    data,tables,version=ui_payload(current)
+    data,tables,version=workspace_payload(store,actor)
     # Stable arguments also let a newly mounted iframe recover without issuing
     # refresh requests. The browser applies data only when its version changes.
     _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],permissions=identity["permissions"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")

@@ -51,7 +51,7 @@ def user_page(store,actor):
     display=[{'Username':u['username'],'Role':u['role'],'Active':bool(u['active']),
               'Last login':format_time(u['last_login_at']),'Last access':format_time(u['last_access_at']),
               **{label:bool(u['permissions'].get(key)) for key,label in PERMISSION_LABELS.items()}} for u in users]
-    st.table(pd.DataFrame(display))
+    st.dataframe(pd.DataFrame(display),hide_index=True,width="stretch",height=260)
     with st.form('create_viewer',clear_on_submit=True):
         st.subheader('Create viewer')
         username=st.text_input('New viewer username')
@@ -90,7 +90,7 @@ def user_page(store,actor):
     events=store.access_log(actor,query or None)
     table=pd.DataFrame([{**e,'occurred_at':format_time(e['occurred_at'])} for e in events])
     if table.empty:st.info('No matching access events.')
-    else:st.table(table)
+    else:st.dataframe(table,hide_index=True,width="stretch",height=400)
 
 def password_page(store,actor):
     st.title('Change password')

@@ -184,8 +184,9 @@ def main():
         st.session_state.last_active=now
         if st.button('← Back to workspace'):
             del st.session_state._account_page;st.rerun()
-        if st.session_state._account_page=='password':password_page(store,actor)
-        else:account_admin_page(store,actor)
+        with st.container(height=750,border=False,key='account_scroll'):
+            if st.session_state._account_page=='password':password_page(store,actor)
+            else:account_admin_page(store,actor)
         return
     render_exact_workspace(store,actor,identity)
 
