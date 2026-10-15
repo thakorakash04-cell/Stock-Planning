@@ -2,6 +2,7 @@ services:
   - type: web
     name: unified-cliq-workspace-bot
     runtime: docker
+    plan: free
     dockerfilePath: ./zoho_bot/Dockerfile
     dockerContext: .
     healthCheckPath: /health
