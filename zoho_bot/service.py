@@ -282,6 +282,9 @@ def chat(body: ChatInput):
     try:
         if body.user_id not in json.loads(os.getenv('CLIQ_USERS_JSON', '{}')):
             raise HTTPException(403, 'Ask the administrator to grant your Cliq ID access.')
+        conversation = load('cliq_conversation', Path(__file__).with_name('conversation.py')) if 'cliq_conversation' not in sys.modules else sys.modules['cliq_conversation']
+        if not conversation.explicit(message):
+            return conversation.reply(body, sys.modules[__name__])
         workspace, query = route(message)
         if not workspace:
             return {'text': HELP}

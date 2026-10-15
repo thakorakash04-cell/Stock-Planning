@@ -71,9 +71,21 @@ Calculations are not saved and uploads/downloads/account changes are not support
 
 AWC: catalogue lookup is informational. `/awc schema` describes the assessment fields. `/awc assess` requires every `WoundAssessment` field explicitly, plus `clinician_confirmed:true`. It calls the existing triage and contraindication engine; it does not infer findings from chat or images. Use the protected dashboard for its three-photo workflow and full clinical review. Responses can be shortened to fit chat; always use the dashboard for the complete care plan.
 
-## 5. Optional natural-language routing
+## 5. Conversational AI answers and follow-ups
 
-Set `GEMINI_API_KEY` and `GEMINI_MODEL` to a model ID available to your account. Without them, all explicit commands above work. With them, mapped users' unrecognized questions are sent to Gemini to select a workspace/query. No database contents or wound images are sent to Gemini by this service. The AI cannot grant permissions, execute SQL, calculate costs or invent clinical inputs. Financial calculations and clinical assessments require explicit structured commands. Follow-ups do not retain conversation context; include the workspace and keywords each time.
+Set these private Render environment variables, then Save and deploy:
+
+- `GEMINI_API_KEY`: your Gemini API key.
+- `GEMINI_MODEL`: a model ID enabled for your account.
+- `AI_DATA_SHARING_ENABLED=true`: explicit administrator opt-in to send questions, recent question/tool-plan context, table schemas and selected permitted app records to Google's Gemini API. This changes the previous question-only routing behavior. Do not enable unless your organization permits this processing. No raw photos, database passwords, account hashes or full workbooks are sent by the assistant.
+
+Users can ask naturally: “Which products need ordering?”, then “Only Ostomy”, then “Explain that shortage”. The assistant validates a structured table plan, calculates filters, grouping, sorting and numeric sums locally across all matching rows, retrieves a preview of up to 20 records and asks Gemini to explain that evidence. It will clarify when a table lacks the columns needed for the question. It does not execute generated Python, SQL, DAX, or workbook instructions. It cannot invent root causes, perform unsupported joins, or access another user's permissions.
+
+BOE can explain latest saved results; new computations still use confirmed structured inputs. FDA/CDSCO uses the existing search sources. AWC can explain catalogue entries; patient-specific clinical findings are never inferred from chat. Supported general concepts can be explained as general guidance, without claiming a live source search.
+
+Follow-up memory is private to an organization/user and current permission/session versions, expires after 30 minutes and retains only four question/tool-plan turns. It is temporary process memory: sleeping/restarting Render clears it. No previous answer or result rows are cached for later use: app evidence is retrieved fresh and permissions rechecked before disclosure and before replying. `reset`, `clear` or `new conversation` clears the history. No chat contents are written to application access logs. A disabled account or changed permission/session version invalidates the old context.
+
+Explicit commands work without AI. If the model/key or sharing opt-in is missing, natural questions explain the missing setting. AI provider calls have short timeouts; provider outages or complex searches can still require a retry. The current handler is synchronous and does not deliver delayed push replies.
 
 ## Maintenance and verification
 
