@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os,time
+import os,time,logging
 from datetime import datetime,timezone
 import pandas as pd
 import streamlit as st
@@ -197,5 +197,6 @@ except AccessDenied:
     st.warning("Your session is no longer active. Sign in again.")
     st.stop()
 except Exception:
+    logging.getLogger(__name__).exception("Stock Planning request failed")
     st.error("The request could not be completed. Please retry; if it continues, ask the administrator to check the database connection.")
     st.stop()

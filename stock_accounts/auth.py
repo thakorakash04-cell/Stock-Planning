@@ -8,7 +8,8 @@ from .store import Store,AccessDenied
 APP_TITLE='Stock & Planning'
 PERMISSION_LABELS={'download': 'Download / export data', 'update_data': 'Upload and replace shared workbook'}
 @st.cache_resource
-def initialize(url,username,password):
+def initialize(url,username,password,store_revision="2026-10-15-login-fix"):
+    # The revision invalidates pre-deployment cached Store instances.
     store=Store(url);store.bootstrap_admin(username,password);return store
 
 def sign_out(store=None,reason='logout'):

@@ -19,7 +19,12 @@ def ui_payload(current):
 
 def workspace_payload(store,actor):
     # Check authorization and the shared version even when a session has cached data.
-    revision=store.dataset_revision(actor)
+    # Streamlit can retain a Store instance from before a hot deployment.
+    # Use its established database API rather than a newly added class method.
+    with store.transaction() as db:
+        store.require(db,actor)
+        row=store.run(db,"SELECT version,updated_at FROM datasets WHERE id='current'").fetchone()
+        revision=(row['version'],row['updated_at']) if row else None
     key=(actor.username,actor.session_id,revision)
     cached=st.session_state.get('_workspace_payload')
     if not cached or cached[0]!=key:
