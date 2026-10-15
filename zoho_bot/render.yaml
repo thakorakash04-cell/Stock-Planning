@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: unified-cliq-workspace-bot
+    runtime: docker
+    dockerfilePath: ./zoho_bot/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: CLIQ_GATEWAY_KEY
+        generateValue: true
+      - key: CLIQ_ORGANIZATION_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CLIQ_USERS_JSON
+        sync: false

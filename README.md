@@ -115,3 +115,8 @@ Commit both frontend source and the updated `frontend_dist` build. Keep existing
 ## Account access controls
 
 See [ACCOUNT_ACCESS.md](ACCOUNT_ACCESS.md) for administrator permissions, persistent access logs and self-service password changes. These controls extend the original viewer-only defaults described above.
+
+
+## One Zoho Cliq bot for all four apps
+
+See [zoho_bot/README.md](zoho_bot/README.md) for the standalone unified backend, Docker deployment, Zoho Message Handler and account mappings. Streamlit does not need to stay awake for the separately hosted backend to answer.
