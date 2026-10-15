@@ -28,3 +28,16 @@ class BridgeTests(unittest.TestCase):
         self.store.save_dataset(self.admin,'test.xlsx',dataset)
         current=self.store.get_dataset(self.viewer);data,tables,version=ui_payload(current)
         self.assertEqual(data['sheets'][0]['rows'],[['TEST']]);self.assertEqual(data['filename'],'test.xlsx')
+
+    def test_delegated_actions_do_not_grant_administration(self):
+        from unittest.mock import patch
+        self.store.update_permissions(self.admin,'viewer_user',{'download':True,'update_data':True})
+        viewer=self.store.login('viewer_user','Test-viewer-password!123')
+        self.assertTrue(handle_request(self.store,viewer,{'action':'export'})['ok'])
+        with patch('exact_ui.read_upload',return_value={'sheets':[],'tables':[]}):
+            answer=handle_request(self.store,viewer,{'action':'upload','filename':'fixture.xlsx','content':base64.b64encode(b'fixture').decode()})
+        self.assertTrue(answer['ok'])
+        self.assertEqual(self.store.get_dataset(viewer)['filename'],'fixture.xlsx')
+        with self.assertRaises(AccessDenied):handle_request(self.store,viewer,{'action':'open_admin'})
+        self.store.update_permissions(self.admin,'viewer_user',{'download':False})
+        with self.assertRaises(AccessDenied):handle_request(self.store,viewer,{'action':'export'})

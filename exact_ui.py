@@ -24,9 +24,25 @@ def handle_request(store,actor,event):
     if action in ("heartbeat","refresh","ack"):
         return {"ok":True}
     if action=="logout":
+        store.log_event(actor,"logout")
         return {"logout":True}
-    if identity["role"]!="admin":
-        raise AccessDenied("Administrator access required.")
+    if action=="open_password":return {"route":"password"}
+    if action=="view":
+        index=event.get("tab")
+        if type(index) is not int or not 0<=index<len(SPECS):raise ValueError("Unknown view.")
+        store.record_access(actor,SPECS[index][0]);return {"ok":True}
+    if action=="export":
+        store.log_event(actor,"export","Table export");return {"ok":True}
+    if action=="upload":
+        store.require_permission(actor,"update_data")
+        content=event.get("content","")
+        if not isinstance(content,str) or len(content)>34_000_000:raise ValueError("Choose a workbook under 25 MB.")
+        raw=base64.b64decode(content,validate=True)
+        dataset=read_upload(raw,str(event.get("filename","workbook.xlsx"))[:255])
+        store.save_dataset(actor,str(event.get("filename","workbook.xlsx"))[:255],dataset)
+        return {"ok":True}
+    if identity["role"]!="admin":raise AccessDenied("Administrator access required.")
+    if action=="open_admin":return {"route":"admin"}
     if action=="list_users":
         return {"users":store.users(actor)}
     if action=="create_viewer":
@@ -37,15 +53,6 @@ def handle_request(store,actor,event):
         if operation=="reset":store.update_viewer(actor,username,password=str(event.get("password","")))
         elif operation in ("disable","enable"):store.update_viewer(actor,username,active=operation=="enable")
         else:raise ValueError("Unknown account operation.")
-        return {"ok":True}
-    if action=="upload":
-        content=event.get("content","")
-        if not isinstance(content,str) or len(content)>34_000_000:
-            raise ValueError("Choose a workbook under 25 MB.")
-        raw=base64.b64decode(content,validate=True)
-        filename=str(event.get("filename","workbook.xlsx"))[:255]
-        dataset=read_upload(raw,filename)
-        store.save_dataset(actor,filename,dataset)
         return {"ok":True}
     raise ValueError("Unknown operation.")
 
@@ -69,6 +76,8 @@ def render_exact_workspace(store,actor,identity):
         st.session_state._ui_last_request=event["id"]
         try:
             result=handle_request(store,actor,event)
+            if result.get("route"):
+                st.session_state._account_page=result["route"];st.rerun()
             if result.get("logout"):
                 st.session_state.clear();st.rerun()
             st.session_state._ui_response={"id":event["id"],"body":result}
@@ -76,8 +85,9 @@ def render_exact_workspace(store,actor,identity):
             st.session_state._ui_response={"id":event["id"],"body":None,"error":str(exc)}
         except Exception:
             st.session_state._ui_response={"id":event["id"],"body":None,"error":"The request failed. Check the workbook or database connection; your previous data is unchanged."}
+    store.record_access(actor,"Workspace")
     current=store.get_dataset(actor)
     data,tables,version=ui_payload(current)
     # Stable arguments also let a newly mounted iframe recover without issuing
     # refresh requests. The browser applies data only when its version changes.
-    _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
+    _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],permissions=identity["permissions"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")

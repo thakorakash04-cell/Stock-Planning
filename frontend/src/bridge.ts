@@ -1,7 +1,7 @@
 import {selectDetails} from './detail-rules';
 import {segmentIndex,filterSegments} from './segments';
 import type {ModelTable} from './model-data';
-type Args={version?:string;data?:Record<string,any>|null;tables?:ModelTable[]|null;user:string;role:string;response?:{id:string;body:any;error?:string}};
+type Args={version?:string;data?:Record<string,any>|null;tables?:ModelTable[]|null;user:string;role:string;permissions?:Record<string,boolean>;response?:{id:string;body:any;error?:string}};
 let state:Args|null=null,parentOrigin='*',lastHeight=0,lastActivity=Date.now()/1000;
 for(const name of ['pointerdown','keydown','touchstart'])window.addEventListener(name,()=>{lastActivity=Date.now()/1000},{passive:true});
 function fitFrame(){let height=window.screen.availHeight-140;try{height=window.parent.innerHeight}catch{}height=Math.max(240,height);if(height!==lastHeight){lastHeight=height;send('streamlit:setFrameHeight',{height})}}
@@ -9,6 +9,8 @@ const waiting=new Map<string,{resolve:(v:any)=>void;reject:(v:Error)=>void}>();
 let queue:Promise<any>=Promise.resolve();let readyListener:((args:Args)=>void)|null=null;
 const send=(type:string,extra:Record<string,unknown>)=>window.parent.postMessage({isStreamlitMessage:true,type,...extra},parentOrigin);
 export const isAdmin=()=>state?.role==='admin';
+export const can=(permission:string)=>isAdmin()||state?.permissions?.[permission]===true;
+export async function authorizeExport(){try{await rpc('export');return true}catch(e){alert(e instanceof Error?e.message:String(e));return false}}
 export function rpc(action:string,payload:Record<string,unknown>={}):Promise<any>{const work=()=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();waiting.set(id,{resolve,reject});send('streamlit:setComponentValue',{value:{id,action,activity:lastActivity,...payload},dataType:'json'});setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(new Error('Request timed out. Please retry.'))}},120000)});const result=queue.then(work);queue=result.catch(()=>{});return result;}
 export async function uploadWorkbook(file:File){const bytes=new Uint8Array(await file.arrayBuffer());let raw='';for(let i=0;i<bytes.length;i+=32768)raw+=String.fromCharCode(...bytes.subarray(i,i+32768));return rpc('upload',{filename:file.name,content:btoa(raw)})}
 export function startBridge(onReady:(args:Args)=>void){

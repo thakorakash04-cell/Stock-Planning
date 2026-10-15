@@ -7,6 +7,7 @@ from storage import Store,Actor,AccessDenied
 from workbook import read_upload,TITLES,SPECS,forecast_summary,segment_map,segment_filter,related_tables
 from tables import table_controls
 from exact_ui import render_exact_workspace
+from workspace_auth import user_page as account_admin_page,password_page
 
 st.set_page_config(page_title="Stock & Planning",page_icon="📦",layout="wide")
 st.markdown("""<style>.block-container{padding-top:2rem;max-width:1900px}h1,h2,h3{color:#285e4c}div[data-testid='stMetric']{display:none}.stButton>button{border-radius:7px}div[data-testid='stDataFrame']{border:1px solid #e0e8e3;border-radius:8px}</style>""",unsafe_allow_html=True)
@@ -174,8 +175,16 @@ def main():
     if isinstance(event,dict) and isinstance(event.get("activity"),(int,float)):
         st.session_state.last_active=max(st.session_state.get("last_active",0),min(now,event["activity"]))
     if now-st.session_state.get("login_at",0)>8*3600 or now-st.session_state.get("last_active",0)>1800:
+        store.log_event(actor,"session_expired")
         sign_out()
     identity=store.identity(actor)
+    if st.session_state.get('_account_page'):
+        st.session_state.last_active=now
+        if st.button('← Back to workspace'):
+            del st.session_state._account_page;st.rerun()
+        if st.session_state._account_page=='password':password_page(store,actor)
+        else:account_admin_page(store,actor)
+        return
     render_exact_workspace(store,actor,identity)
 
 try:
