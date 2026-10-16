@@ -36,6 +36,9 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
+    if action=="matched_export":
+        from .matched_export import export_matched
+        return export_matched(store,actor,event)
     if action in ("planning_status","planning_calculate"):
         from .planning import handle_planning
         return handle_planning(store,actor,event)

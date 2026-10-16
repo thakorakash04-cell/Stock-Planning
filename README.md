@@ -147,3 +147,13 @@ Planning needs an uploaded embedded `BOM` table with the existing merged stock
 and on-order columns. An upload containing only saved worksheet summaries cannot
 support recalculation. All planning requests recheck account access, and a stale
 workbook version must be reloaded before calculation. No Gemini key is needed.
+
+### Viewer downloads from a clicked value
+
+Viewers can download the filtered matched-records table opened by clicking a
+worksheet value. The Excel file contains only the displayed columns and matching
+rows from that one source table. The server validates the selected worksheet row,
+workbook revision, source table, columns and every exported row against the
+related material context. This does not grant the broad `download` permission:
+main worksheet tables, Entire workbook, ZIP exports and Ask AI exports retain
+their existing access rules. Downloads are recorded in the administrator log.

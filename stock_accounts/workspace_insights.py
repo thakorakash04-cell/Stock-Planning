@@ -36,6 +36,9 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
+    if action=="matched_export":
+        from .matched_export import export_matched
+        return export_matched(store,actor,event)
     if action in ("planning_status","planning_calculate"):
         from .planning import handle_planning
         return handle_planning(store,actor,event)
@@ -140,4 +143,4 @@ def render_exact_workspace(store,actor,identity):
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
 
-PLANNING_REVISION=1
+PLANNING_REVISION=2

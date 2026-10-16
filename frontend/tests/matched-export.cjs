@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),{JSDOM}=require('jsdom');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,n)=>m._compile(ts.transpileModule(fs.readFileSync(n,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,n);
+const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://workspace.test'});
+Object.assign(global,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true});
+const downloads=[];global.URL.createObjectURL=()=> 'blob:test';global.URL.revokeObjectURL=()=>{};window.HTMLAnchorElement.prototype.click=function(){};
+require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>false,authorizeExport:async()=>{throw Error('Broad export must not be used')},exportMatchedRows:async p=>{downloads.push(p);return {content:Buffer.from('xlsx').toString('base64'),mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',filename:'Matched_records.xlsx'}}}};
+global.fetch=async()=>Response.json({available:true,table:'Stock Data',tables:[{name:'Stock Data',count:2}],headers:['Material','Qty'],rows:[['A',5],['A',6]],total:2,totalRelated:2,segments:[]});
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root')),Grid=require('../src/data-grid.tsx').default,Details=require('../src/source-details.tsx').default;
+const tick=()=>new Promise(r=>setTimeout(r,200));
+(async()=>{
+ await act(async()=>root.render(React.createElement(Grid,{headers:['Material'],rows:[['A']],storageKey:'main'})));
+ assert.ok(!document.body.textContent.includes('Download matched records'));assert.ok(!document.body.textContent.includes('Export filtered CSV'));
+ await act(async()=>root.render(React.createElement(Details,{tab:0,row:['A',5],col:1,value:5,label:'Qty'})));
+ await act(async()=>{await tick()});
+ const download=()=>[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Download matched records'));
+ assert.ok(download());assert.ok(!document.body.textContent.includes('Export all tables'));
+ const input=document.querySelector('[aria-label="Filter text for Qty"]');
+ await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(input,'5');input.dispatchEvent(new window.Event('input',{bubbles:true}))});
+ await act(async()=>{download().click();await tick()});
+ assert.deepEqual(downloads[0].rows,[['A',5]]);assert.equal(downloads[0].table,'Stock Data');assert.deepEqual(downloads[0].headers,['Material','Qty']);
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Entire workbook').click());
+ await act(async()=>{await tick()});assert.equal(download(),undefined,'Entire-workbook tables have no viewer download');
+ await act(async()=>root.unmount());console.log('Passed: viewer downloads clicked-value filtered matches only; main tables, all-table ZIP and entire-workbook downloads stay restricted.');
+})().catch(e=>{console.error(e);process.exitCode=1});
