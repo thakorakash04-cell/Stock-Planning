@@ -14,6 +14,9 @@ from stock_accounts import insights as _insights, assistant_insights as _assista
 for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
+# Refresh the dispatcher when an already-running process gains planning RPCs.
+if getattr(_workspace,'PLANNING_REVISION',0)!=1:
+    importlib.reload(_workspace)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 

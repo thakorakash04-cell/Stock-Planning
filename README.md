@@ -124,3 +124,26 @@ See [zoho_bot/README.md](zoho_bot/README.md) for the standalone unified backend,
 ## Ask AI
 
 See [ASK_AI.md](ASK_AI.md) for the Gemini Secrets setup, data sharing, query evidence and permissions.
+
+## FG planning inside Order requirements
+
+Select an FG material, enter its planning quantity in the displayed unit, and
+choose **Add FG**. Add more FG items or edit the quantity rows, then choose
+**Calculate need to order**. Results contain only components linked to positive
+entered quantities. Editing any quantity clears the previous result until it is
+recalculated. Reloading materials or replacing the workbook clears the plan.
+Plans are session calculations and do not replace the shared workbook.
+
+The calculation reproduces the master's Power Query `BOM` → `Need to Order
+Sheet` logic: multiply each entered FG quantity by `Component quantity`, convert
+each BOM-row requirement to Int64 with round-to-even, group by `Component`,
+`Component(text)` and `Material Type`, sum requirements, and deduct the minimum
+merged available stock and minimum merged on-order stock once per group. The
+final need-to-order quantity is converted to Int64. Nulls and negative balances
+are preserved. There is no extra division by BOM base quantity, FG-stock
+subtraction, or recursive BOM explosion in this PS calculation.
+
+Planning needs an uploaded embedded `BOM` table with the existing merged stock
+and on-order columns. An upload containing only saved worksheet summaries cannot
+support recalculation. All planning requests recheck account access, and a stale
+workbook version must be reloaded before calculation. No Gemini key is needed.

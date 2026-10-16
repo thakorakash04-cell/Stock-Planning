@@ -42,3 +42,20 @@ def test_startup_refreshes_an_older_analysis_protocol_without_reloading_accounts
             assert workspace.handle_request is not stale
             assert account_store.Store is old_store_class
         st.cache_resource.clear()
+
+def test_startup_refreshes_dispatcher_from_before_planning():
+    import stock_accounts.workspace_insights as workspace
+    import stock_accounts.store as account_store
+    old_store_class=account_store.Store
+    with tempfile.TemporaryDirectory() as folder:
+        at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30)
+        at.secrets.update({'DATABASE_URL':'sqlite:///'+str(Path(folder)/'planning-startup.db'),
+            'ADMIN_USERNAME':'startup_admin','ADMIN_PASSWORD':'Startup-admin-password!123'})
+        def stale(*args,**kwargs):raise ValueError('Unknown operation.')
+        with patch.object(workspace,'PLANNING_REVISION',0),patch.object(workspace,'handle_request',stale):
+            at.run()
+            assert not at.exception
+            assert workspace.PLANNING_REVISION==1
+            assert workspace.handle_request is not stale
+            assert account_store.Store is old_store_class
+        st.cache_resource.clear()

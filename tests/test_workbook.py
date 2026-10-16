@@ -20,3 +20,22 @@ class WorkbookTests(unittest.TestCase):
         self.assertEqual(related_tables(tables,"A",True),tables)
         bom=pd.DataFrame(tables[1]["rows"],columns=tables[1]["headers"])
         self.assertEqual(segment_filter(bom,mapping,"Ostomy Care")["Material"].tolist(),["A"])
+
+def test_model_import_keeps_precision_needed_for_ps_whole_number_rounding():
+    import io,zipfile
+    from unittest.mock import patch,MagicMock
+    from openpyxl import Workbook
+    from workbook import read_upload,SPECS
+    wb=Workbook();wb.remove(wb.active)
+    for name,header,first,last,_ in SPECS:
+        ws=wb.create_sheet(name)
+        for col in range(first,last+1):ws.cell(header,col,'Column '+str(col))
+        ws.cell(header+1,first,'A')
+    out=io.BytesIO();wb.save(out)
+    with zipfile.ZipFile(out,'a') as z:z.writestr('xl/model/item.data',b'mocked model')
+    frame=pd.DataFrame({'Component quantity':[0.0014999999998]})
+    model=MagicMock();model.__enter__.return_value=model;model.tables=['BOM'];model.get_table.return_value=frame
+    with patch('pbixray.PBIXRay',return_value=model):
+        value=read_upload(out.getvalue(),'master.xlsx')['tables'][0]['rows'][0][0]
+    assert value==0.0014999999998
+    assert round(value*1000)==1  # Rounding to 10 decimals would produce 2.

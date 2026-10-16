@@ -74,7 +74,7 @@ def read_upload(data,filename):
                 for name in model.tables:
                     frame=model.get_table(name)
                     frame=frame[[c for c in frame.columns if c!="__XL_RowNumber"]]
-                    tables.append({"name":str(name),"headers":list(frame.columns),"rows":json.loads(frame.to_json(orient="values",date_format="iso"))})
+                    tables.append({"name":str(name),"headers":list(frame.columns),"rows":json.loads(frame.to_json(orient="values",date_format="iso",double_precision=15))})
             validate_model(tables)
         finally:
             if path:os.unlink(path)

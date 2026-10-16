@@ -36,6 +36,9 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
+    if action in ("planning_status","planning_calculate"):
+        from .planning import handle_planning
+        return handle_planning(store,actor,event)
     if action in ('ai_status','ask_ai','ai_clear','ai_export','generate_insights','insight_records'):
         from .assistant_insights import handle_ai
         return handle_ai(store,actor,event)
@@ -136,3 +139,5 @@ def render_exact_workspace(store,actor,identity):
 
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
+
+PLANNING_REVISION=1
