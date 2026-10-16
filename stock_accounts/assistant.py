@@ -72,6 +72,23 @@ def handle_ai(store,actor,event):
         return {'ok':True}
     if event.get('consent') is not True:raise ValueError('Enable sharing the question and relevant loaded records with Google Gemini first.')
     if event.get('version')!=version:raise ValueError('The workbook changed. Refresh this chat and ask again using the current data.')
+    if event.get('action')=='generate_insights':
+        from .insights import build_report,report_views
+        from .workspace import workspace_payload
+        data,_,_=workspace_payload(store,actor)
+        result=build_report(tables,report_views(data))
+        store.require_permission(actor,'use_tools')
+        if stock_tables(store,actor)[1]!=version:raise ValueError('The workbook changed. Generate the report again.')
+        if store.identity(actor)['role']=='admin':
+            exports=st.session_state.setdefault('_stock_ai_exports',{})
+            for section in result['sections']:
+                for chart in section['charts']:
+                    token=secrets.token_urlsafe(18)
+                    exports[token]={'version':version,'query':chart['evidence']['query']}
+                    chart['evidence']['export_id']=token
+            while len(exports)>60:exports.pop(next(iter(exports)))
+        store.log_event(actor,'tool_use','Insights & Graphs')
+        return {**result,'version':version}
     context=event.get('context')
     thread=hashlib.sha256(json_text([version,context]).encode()).hexdigest()
     threads=st.session_state.setdefault('_stock_ai_threads',{})

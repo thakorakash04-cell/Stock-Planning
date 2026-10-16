@@ -36,7 +36,7 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
-    if action in ('ai_status','ask_ai','ai_clear','ai_export'):
+    if action in ('ai_status','ask_ai','ai_clear','ai_export','generate_insights'):
         from .assistant import handle_ai
         return handle_ai(store,actor,event)
     if action in ("heartbeat","refresh","ack"):
