@@ -64,3 +64,24 @@ def test_frame_dates_nulls_and_numeric_values_are_json_safe():
 def test_configuration_uses_streamlit_secrets_and_keeps_model_override():
     with patch('grounded_ai.st.secrets',{'GEMINI_API_KEY':' secret-key ','ASK_AI_MODEL':'models/custom-model'}),patch.dict('os.environ',{'GEMINI_API_KEY':'other-key'}):
         assert settings()==('secret-key','custom-model')
+
+
+def test_numeric_text_totals_filters_and_ranking_preserve_unknowns():
+    tables=[{'id':'T1','name':'Stock','headers':['Material','Qty'],'rows':[['A','1,000'],['B','(20)'],['C',None],['D','2,500.5']]}]
+    result=execute_query(tables,{'table':'T1','metrics':[{'column':'Qty','op':'sum'}]})
+    assert result['records'][0]['sum(Qty)']==3480.5
+    result=execute_query(tables,{'table':'T1','filters':[{'column':'Qty','op':'lt','value':0}]})
+    assert result['matched_records']==1
+    result=execute_query(tables,{'table':'T1','sort_by':'Qty','limit':1})
+    assert result['records'][0]['Material']=='D'
+    tables[0]['rows'].append(['E','invalid'])
+    with pytest.raises(ValueError,match='non-numeric'):execute_query(tables,{'table':'T1','metrics':[{'column':'Qty','op':'sum'}]})
+
+
+def test_long_structured_report_respects_requested_output_budget():
+    output=json.dumps({'overview':'A'*30000})
+    with patch('grounded_ai.requests.post') as post:
+        post.return_value=Mock(status_code=200)
+        post.return_value.json.return_value={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':output}]}}]}
+        result=generate('key','model','system',{},True,max_output_tokens=14000)
+        assert len(result['overview'])==30000

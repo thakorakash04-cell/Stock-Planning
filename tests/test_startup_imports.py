@@ -38,7 +38,7 @@ def test_startup_refreshes_an_older_analysis_protocol_without_reloading_accounts
         with patch.object(workspace,'INSIGHTS_REVISION',1),patch.object(workspace,'handle_request',stale):
             at.run()
             assert not at.exception
-            assert workspace.INSIGHTS_REVISION==2
+            assert workspace.INSIGHTS_REVISION==3
             assert workspace.handle_request is not stale
             assert account_store.Store is old_store_class
         st.cache_resource.clear()

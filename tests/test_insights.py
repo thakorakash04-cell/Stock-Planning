@@ -20,14 +20,17 @@ def test_chart_values_are_calculated_from_full_table():
     assert result['answer']=='Review actions'
 
 @pytest.mark.parametrize('change',['wrong_table','text_metric','missing_view','duplicate_view'])
-def test_bad_plans_are_rejected(change):
+def test_bad_plans_are_isolated_and_valid_coverage_survives(change):
     tables,views,plan=fixture();chart=plan['sections'][0]['charts'][0]
     if change=='wrong_table':chart['query']['table']='T2'
     if change=='text_metric':chart['value']='Material'
     if change=='missing_view':plan['sections']=[]
     if change=='duplicate_view':views.append({'view':1,'title':'Other','table':'Stock'});plan['sections']*=2
     with patch('stock_accounts.insights.settings',return_value=('key','model')),patch('stock_accounts.insights.generate',return_value=plan):
-        with pytest.raises(ValueError):build_report(tables,views)
+        report=build_report(tables,views)
+    assert len(report['sections'])==len(views)
+    assert all(s['review']['findings'] and s['review']['actions'] for s in report['sections'])
+    assert all(c['evidence']['table_id']=='T1' and c['value']!='Material' for s in report['sections'] for c in s['charts'])
 
 def test_report_permission_consent_and_version(accounts):
     store,admin,viewer=accounts
@@ -102,3 +105,32 @@ def test_graph_source_rows_are_paginated_and_authorized(accounts):
     with pytest.raises(ValueError,match='changed'):request(store,viewer,{**event,'version':'old'})
     store.update_permissions(admin,'viewer_user',{'use_tools':False});viewer=store.login('viewer_user','Test-viewer-password!123')
     with pytest.raises(Exception,match='[Pp]ermission|[Aa]ccess'):request(store,viewer,event)
+
+@pytest.mark.parametrize('review',[
+ {'sections':[{'view':'0','findings':['Stock fact'],'actions':['Check stock']}]},
+ {'sections':{'0':{'key_findings':['Stock fact'],'suggested_actions':'Check stock'}}},
+ {'sections':[{'title':'Stock overview','review':{'observations':['Stock fact'],'recommendations':['Check stock']}}]},
+])
+def test_review_formats_are_normalized(review):
+    tables,views,plan=fixture()
+    with patch('stock_accounts.insights.settings',return_value=('key','model')),patch('stock_accounts.insights.generate',side_effect=[plan,review]):result=build_report(tables,views)
+    assert result['sections'][0]['review']['findings']==['Stock fact']
+    assert result['sections'][0]['review']['actions']==['Check stock']
+    assert result['sections'][0]['review_mode']=='ai'
+
+
+def test_narrative_failure_keeps_calculated_findings_and_actions():
+    tables,views,plan=fixture()
+    with patch('stock_accounts.insights.settings',return_value=('key','model')),patch('stock_accounts.insights.generate',side_effect=[plan,ValueError('Quota reached')]):result=build_report(tables,views)
+    section=result['sections'][0]
+    assert section['charts'] and section['review']['findings'] and section['review']['actions']
+    assert section['review_mode']=='calculated' and 'Quota reached' in result['warnings'][0]
+
+
+def test_invalid_chart_does_not_discard_valid_charts_and_styles_vary():
+    tables,views,plan=fixture()
+    plan['sections'][0]['charts'].insert(0,{'query':{'table':'T1','metrics':[{'column':'Qty','op':'divide'}]}})
+    with patch('stock_accounts.insights.settings',return_value=('key','model')),patch('stock_accounts.insights.generate',side_effect=[plan,{}]):result=build_report(tables,views)
+    section=result['sections'][0]
+    assert section['issues'] and section['charts'][0]['title']=='Highest stock'
+    assert len(set(c['type'] for c in section['charts']))>=2

@@ -135,4 +135,4 @@ def render_exact_workspace(store,actor,identity):
     _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],permissions=identity["permissions"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
 
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
-INSIGHTS_REVISION=2
+INSIGHTS_REVISION=3

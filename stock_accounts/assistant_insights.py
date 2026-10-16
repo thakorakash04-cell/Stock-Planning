@@ -134,4 +134,4 @@ def handle_ai(store,actor,event):
     return {**result,'version':version}
 
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
-INSIGHTS_REVISION=2
+INSIGHTS_REVISION=3
