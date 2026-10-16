@@ -6,7 +6,7 @@ import streamlit as st
 from stock_accounts.store import Store,Actor,AccessDenied
 from workbook import read_upload,TITLES,SPECS,forecast_summary,segment_map,segment_filter,related_tables
 from tables import table_controls
-from stock_accounts.workspace import render_exact_workspace,process_account_navigation,account_page_style
+from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 
 st.set_page_config(page_title="Stock & Planning",page_icon="📦",layout="wide")

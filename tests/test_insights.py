@@ -39,3 +39,20 @@ def test_report_permission_consent_and_version(accounts):
         build.assert_not_called()
     store.update_permissions(admin,'viewer_user',{'use_tools':False});viewer=store.login('viewer_user','Test-viewer-password!123')
     with pytest.raises(Exception,match='[Pp]ermission|[Aa]ccess'):handle_request(store,viewer,{**event,'consent':True})
+
+def test_fresh_dispatch_works_with_stale_modules(accounts):
+    import sys,types
+    from stock_accounts.workspace_insights import handle_request as fresh_request
+    store,admin,viewer=accounts
+    old_workspace=types.ModuleType('stock_accounts.workspace')
+    old_assistant=types.ModuleType('stock_accounts.assistant')
+    def stale(*args):raise ValueError('Unknown operation.')
+    old_workspace.handle_request=stale
+    old_assistant.handle_ai=stale
+    with patch.dict(sys.modules,{'stock_accounts.workspace':old_workspace,'stock_accounts.assistant':old_assistant}):
+        status=fresh_request(store,viewer,{'action':'ai_status'})
+        result={'sections':[],'answer':'Verified report'}
+        with patch('stock_accounts.insights.build_report',return_value=result) as build:
+            response=fresh_request(store,viewer,{'action':'generate_insights','consent':True,'version':status['version']})
+        assert response['answer']=='Verified report'
+        build.assert_called_once()
