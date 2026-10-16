@@ -18,6 +18,9 @@ const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.
  assert.equal(document.querySelector('.cellask'),null,'Per-cell Ask AI controls are removed');
  await act(async()=>{root.render(React.createElement(AskAI));await tick()});
  assert.ok(document.querySelector('.aichat:not(.aiwindow)'));
+ assert.equal(document.querySelector('textarea').rows,1);
+ await act(async()=>document.querySelector('[aria-label="Expand chat"]').click());assert.ok(document.querySelector('.aichat-expanded'));
+ await act(async()=>document.querySelector('[aria-label="Exit expanded chat"]').click());assert.equal(document.querySelector('.aichat-expanded'),null);
  const input=document.querySelector('textarea');
  await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(input,'Explain this value');input.dispatchEvent(new window.Event('input',{bubbles:true}));input.dispatchEvent(new window.Event('change',{bubbles:true}));await tick()});
  assert.equal(document.querySelector('button[type="submit"]').disabled,true);
@@ -27,7 +30,7 @@ const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.
  assert.equal(packets.find(p=>p.action==='ask_ai').payload.context,null);
  assert.equal([...document.querySelectorAll('.aitext')].at(-1).textContent,'Quantity is 5.');
  assert.ok(document.body.textContent.includes('1 matching records'));
- await act(async()=>{document.querySelector('.aichat>.textbutton').click();await tick()});assert.ok(packets.some(p=>p.action==='ai_clear'));
+ await act(async()=>{[...document.querySelectorAll('.aichat button')].find(b=>b.textContent==='Clear chat').click();await tick()});assert.ok(packets.some(p=>p.action==='ai_clear'));
  const Dashboard=require('../src/dashboard.tsx').default;
  global.fetch=async()=>Response.json({filename:'stock.xlsx',updatedAt:'2026-10-15',asOf:'Saved',sheets:Array.from({length:7},(_,i)=>({name:'Sheet '+i,headers:['Material','Qty'],rows:[['A',5]]})),segmentMap:{}});
  await act(async()=>{root.render(React.createElement(Dashboard,{user:'viewer'}));await tick()});
