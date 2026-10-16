@@ -56,3 +56,54 @@ def test_forecast_product_totals_deduct_stock_once(accounts):
     tables,version,name=stock_tables(store,viewer)
     summary=next(t for t in tables if t['name']=='Forecast Planning — product totals')
     assert summary['rows']==[['A','Item',30.0,6.0,3.0,21.0]]
+
+def test_admin_downloads_all_matches_and_all_source_columns(accounts):
+    import base64,io
+    from openpyxl import load_workbook
+    from grounded_ai import execute_query
+    store,admin,viewer=accounts
+    rows=[['=NOT_A_FORMULA',i,'X'] for i in range(1,31)]+[['Excluded',0,'Y']]
+    store.save_dataset(admin,'export.xlsx',{'sheets':[{'name':'Stock','headers':['Material','Qty','Segment'],'rows':rows}],'tables':[]})
+    status=handle_request(store,admin,{'action':'ai_status'})
+    query={'table':'T1','filters':[{'column':'Qty','op':'gt','value':0}],'columns':['Material','Qty'],'limit':20}
+    from stock_accounts.assistant import stock_tables
+    tables,_,_=stock_tables(store,admin)
+    result={'answer':'30 matches','evidence':[{'citation':'Q1',**execute_query(tables,query)}]}
+    with patch('stock_accounts.assistant.ask',return_value=result):
+        answer=handle_request(store,admin,{'action':'ask_ai','version':status['version'],'question':'Private test question','consent':True})
+    evidence=answer['evidence'][0];assert evidence['shown_rows']==20
+    file=handle_request(store,admin,{'action':'ai_export','export_id':evidence['export_id'],'version':status['version'],'query':{'table':'accounts'}})
+    workbook=load_workbook(io.BytesIO(base64.b64decode(file['content'])))
+    assert workbook['Result table'].max_row==31
+    assert workbook['Matching records'].max_row==31
+    assert [c.value for c in workbook['Matching records'][1]]==['Source row','Material','Qty','Segment']
+    assert workbook['Matching records']['B2'].value=='=NOT_A_FORMULA'
+    assert workbook['Matching records']['B2'].data_type=='s'
+    assert any(e['action']=='export' and e['resource']=='Ask AI matching records' for e in store.access_log(admin))
+    assert 'Private test question' not in str(store.access_log(admin))
+    # A viewer with ordinary download permission must still be denied.
+    store.update_permissions(admin,'viewer_user',{'download':True})
+    viewer=store.login('viewer_user','Test-viewer-password!123')
+    with pytest.raises(AccessDenied,match='administrators'):
+        handle_request(store,viewer,{'action':'ai_export','export_id':evidence['export_id'],'version':status['version']})
+    with pytest.raises(ValueError,match='expired'):
+        handle_request(store,admin,{'action':'ai_export','export_id':'forged','version':status['version']})
+    store.save_dataset(admin,'new.xlsx',{'sheets':[{'name':'Stock','headers':['Material'],'rows':[['new']]}],'tables':[]})
+    with pytest.raises(ValueError,match='changed'):
+        handle_request(store,admin,{'action':'ai_export','export_id':evidence['export_id'],'version':status['version']})
+
+def test_grouped_download_contains_result_and_underlying_records(accounts):
+    import base64,io
+    from openpyxl import load_workbook
+    from grounded_ai import execute_query
+    from stock_accounts.assistant import stock_tables
+    store,admin,viewer=accounts
+    tables,version,_=stock_tables(store,admin)
+    query={'table':'T1','metrics':[{'column':'Qty','op':'sum'}]}
+    result={'answer':'Total 12','evidence':[{'citation':'Q1',**execute_query(tables,query)}]}
+    with patch('stock_accounts.assistant.ask',return_value=result):
+        answer=handle_request(store,admin,{'action':'ask_ai','question':'Total quantity','version':version,'consent':True})
+    file=handle_request(store,admin,{'action':'ai_export','export_id':answer['evidence'][0]['export_id'],'version':version})
+    workbook=load_workbook(io.BytesIO(base64.b64decode(file['content'])))
+    assert workbook['Result table']['A2'].value==12
+    assert workbook['Matching records'].max_row==3

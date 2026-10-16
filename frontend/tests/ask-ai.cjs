@@ -3,8 +3,9 @@ for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,n)=>m._compile(ts.tra
 const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://workspace.test'});
 Object.assign(global,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,CustomEvent:dom.window.CustomEvent,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true});
 dom.window.HTMLElement.prototype.scrollIntoView=function(){};
-const packets=[];
-require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>true,isAdmin:()=>false,openAccount(){},rpc:async(action,payload)=>{packets.push({action,payload});if(action==='ai_status')return {configured:true,model:'model',version:'v1',filename:'stock.xlsx',tables:1};if(action==='ask_ai')return {answer:'Quantity is 5 [T1:R30] [Q1].',evidence:[{citation:'Q1',table:'Stock',matched_records:1,result_rows:1,shown_rows:1,query:{table:'T1'},records:[{Qty:5}]}]};return {ok:true}}}};
+const packets=[];let admin=false;
+const downloads=[];global.URL.createObjectURL=blob=>{downloads.push(blob);return 'blob:test'};global.URL.revokeObjectURL=()=>{};dom.window.HTMLAnchorElement.prototype.click=function(){};
+require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>true,isAdmin:()=>admin,openAccount(){},rpc:async(action,payload)=>{packets.push({action,payload});if(action==='ai_status')return {configured:true,model:'model',version:'v1',filename:'stock.xlsx',tables:1};if(action==='ai_export')return {content:Buffer.from('fixture workbook').toString('base64'),filename:'matching.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};if(action==='ask_ai')return {answer:'Quantity is 5 [T1:R30] [Q1].',evidence:[{export_id:'server-download-token',citation:'Q1',table:'Stock',matched_records:1,result_rows:1,shown_rows:1,query:{table:'T1'},records:[{Qty:5}]}]};return {ok:true}}}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root'));
 const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.tsx').default,tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
@@ -30,6 +31,15 @@ const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.
  assert.equal(packets.find(p=>p.action==='ask_ai').payload.context,null);
  assert.equal([...document.querySelectorAll('.aitext')].at(-1).textContent,'Quantity is 5.');
  assert.ok(document.body.textContent.includes('1 matching records'));
+ assert.equal(document.querySelector('.aiexport'),null,'Viewers never see the AI download button');
+ admin=true;
+ await act(async()=>{root.render(React.createElement(AskAI));await tick()});
+ assert.ok(document.querySelector('.aiexport'),'Administrators can download each evidence table');
+ await act(async()=>{document.querySelector('.aiexport').click();await tick()});
+ assert.deepEqual(packets.find(p=>p.action==='ai_export').payload,{export_id:'server-download-token',version:'v1'});
+ assert.equal(downloads[0].type,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+ admin=false;
+
  await act(async()=>{[...document.querySelectorAll('.aichat button')].find(b=>b.textContent==='Clear chat').click();await tick()});assert.ok(packets.some(p=>p.action==='ai_clear'));
  const Dashboard=require('../src/dashboard.tsx').default;
  global.fetch=async()=>Response.json({filename:'stock.xlsx',updatedAt:'2026-10-15',asOf:'Saved',sheets:Array.from({length:7},(_,i)=>({name:'Sheet '+i,headers:['Material','Qty'],rows:[['A',5]]})),segmentMap:{}});
