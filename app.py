@@ -6,6 +6,14 @@ import streamlit as st
 from stock_accounts.store import Store,Actor,AccessDenied
 from workbook import read_upload,TITLES,SPECS,forecast_summary,segment_map,segment_filter,related_tables
 from tables import table_controls
+# Streamlit may retain helper modules across a source update. Reload only an
+# older analysis revision, in dependency order; never reload account storage.
+import importlib
+import grounded_ai as _grounded_ai
+from stock_accounts import insights as _insights, assistant_insights as _assistant, workspace_insights as _workspace
+for _module in (_grounded_ai,_insights,_assistant,_workspace):
+    if getattr(_module,'INSIGHTS_REVISION',0)!=2:
+        importlib.reload(_module)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 

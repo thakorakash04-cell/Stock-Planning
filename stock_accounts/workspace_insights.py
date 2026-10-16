@@ -36,7 +36,7 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
-    if action in ('ai_status','ask_ai','ai_clear','ai_export','generate_insights'):
+    if action in ('ai_status','ask_ai','ai_clear','ai_export','generate_insights','insight_records'):
         from .assistant_insights import handle_ai
         return handle_ai(store,actor,event)
     if action in ("heartbeat","refresh","ack"):
@@ -133,3 +133,6 @@ def render_exact_workspace(store,actor,identity):
     # Stable arguments also let a newly mounted iframe recover without issuing
     # refresh requests. The browser applies data only when its version changes.
     _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],permissions=identity["permissions"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
+
+# Increment with analysis protocol changes to invalidate hot-deployment helpers.
+INSIGHTS_REVISION=2

@@ -5,7 +5,7 @@ Object.assign(global,{window:dom.window,document:dom.window.document,HTMLElement
 dom.window.HTMLElement.prototype.scrollIntoView=function(){};
 const packets=[];let admin=false;
 const downloads=[];global.URL.createObjectURL=blob=>{downloads.push(blob);return 'blob:test'};global.URL.revokeObjectURL=()=>{};dom.window.HTMLAnchorElement.prototype.click=function(){};
-require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>true,isAdmin:()=>admin,openAccount(){},rpc:async(action,payload)=>{packets.push({action,payload});if(action==='ai_status')return {configured:true,model:'model',version:'v1',filename:'stock.xlsx',tables:1};if(action==='generate_insights')return {version:'v1',answer:'Review stock levels.',generated_at:'2026-10-16',sections:[{view:0,title:'Stock overview',records:3,limitation:'Snapshot only',charts:[{title:'Highest quantity',label:'Material',value:'Qty',evidence:{table:'Stock',matched_records:3,result_rows:3,shown_rows:2,records:[{Material:'A',Qty:9},{Material:'B',Qty:3}]}}]}]};if(action==='ai_export')return {content:Buffer.from('fixture workbook').toString('base64'),filename:'matching.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};if(action==='ask_ai')return {answer:'Quantity is 5 [T1:R30] [Q1].',evidence:[{export_id:'server-download-token',citation:'Q1',table:'Stock',matched_records:1,result_rows:1,shown_rows:1,query:{table:'T1'},records:[{Qty:5}]}]};return {ok:true}}}};
+require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>true,isAdmin:()=>admin,openAccount(){},rpc:async(action,payload)=>{packets.push({action,payload});if(action==='ai_status')return {configured:true,model:'model',version:'v1',filename:'stock.xlsx',tables:1};if(action==='generate_insights')return {version:'v1',answer:'## Planning Review\n**Review stock levels.**',generated_at:'2026-10-16',sections:[{view:0,title:'Stock overview',records:3,limitation:'Snapshot only',charts:[{title:'Highest quantity',label:'Material',value:'Qty',evidence:{table:'Stock',matched_records:3,result_rows:3,shown_rows:2,records:[{Material:'A',Qty:9},{Material:'B',Qty:3}]}}]}]};if(action==='ai_export')return {content:Buffer.from('fixture workbook').toString('base64'),filename:'matching.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};if(action==='ask_ai')return {answer:'Quantity is 5 [T1:R30] [Q1].',evidence:[{export_id:'server-download-token',citation:'Q1',table:'Stock',matched_records:1,result_rows:1,shown_rows:1,query:{table:'T1'},records:[{Qty:5}]}]};return {ok:true}}}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root'));
 const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.tsx').default,tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
@@ -55,6 +55,11 @@ const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.
  await act(async()=>{generate.click();await tick()});
  assert.equal(packets.filter(p=>p.action==='generate_insights').length,1);
  assert.ok(document.querySelector('[role="img"]').textContent.includes('9'));
+ assert.ok(!document.querySelector('.insight-summary').textContent.includes('##'));
+ await act(async()=>{document.querySelector('.chart-open').click();await tick()});
+ assert.ok(document.querySelector('[role="dialog"]'),'Clicking the graph opens its source table');
+ assert.ok(document.querySelector('[role="dialog"]').textContent.includes('Values used in this graph'));
+ await act(async()=>{document.querySelector('[aria-label="Close graph data"]').click();await tick()});
  assert.ok(document.body.textContent.includes('3 matching records'));
  await act(async()=>{window.dispatchEvent(new window.Event('stock-data-updated'));await tick()});
  assert.ok(document.body.textContent.includes('Highest quantity'),'Same snapshot recovers report');

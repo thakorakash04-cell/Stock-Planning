@@ -54,8 +54,8 @@ def provider_failure(response):
     if code>=500:return 'Gemini is temporarily unavailable. Please retry shortly.'
     return 'Gemini request failed (HTTP '+str(code)+'). Check API access and billing in Google AI Studio.'
 
-def generate(key,model,instruction,payload,structured=False):
-    config={'maxOutputTokens':5000}
+def generate(key,model,instruction,payload,structured=False,*,max_output_tokens=5000):
+    config={'maxOutputTokens':max_output_tokens}
     if structured:config['responseMimeType']='application/json'
     try:
         response=requests.post('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',headers={'x-goog-api-key':key,'Content-Type':'application/json'},json={'system_instruction':{'parts':[{'text':instruction}]},'contents':[{'role':'user','parts':[{'text':json_text(payload)}]}],'generationConfig':config},timeout=(10,55))
@@ -154,3 +154,6 @@ def ask(tables,question,history=None,context=None,scope='Loaded data'):
     if len(json_text(evidence))>65000:raise ValueError('The results are too wide. Ask for fewer columns or a summary.')
     answer=generate(key,model,ANSWER,{'scope':scope,'question':question,'history':history,'selected':selected,'evidence':evidence})
     return {'answer':answer,'evidence':evidence,'selected':selected,'model':model}
+
+# Increment with analysis protocol changes to invalidate hot-deployment helpers.
+INSIGHTS_REVISION=2

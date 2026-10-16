@@ -58,9 +58,26 @@ def export_evidence(store,actor,event,tables,version):
     store.log_event(actor,'export','Ask AI matching records')
     return {'content':base64.b64encode(output.getvalue()).decode(),'filename':'Ask_AI_matching_records.xlsx','mime':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','matched_records':matching['matched_records']}
 
+def insight_records(store,actor,event,tables,version):
+    entry=st.session_state.get('_stock_insight_sources',{}).get(str(event.get('source_id','')))
+    if not entry:raise ValueError('This chart has expired. Generate insights again.')
+    if entry['version']!=version or event.get('version')!=version:raise ValueError('The workbook changed. Generate insights again.')
+    page=event.get('page',0)
+    if type(page) is not int or not 0<=page<=10000:raise ValueError('Invalid source table page.')
+    query=entry['query']
+    raw={'table':query['table'],'filters':query.get('filters',[]),'limit':20}
+    table=next(t for t in tables if t['id']==query['table'])
+    if query.get('sort_by') in table['headers']:raw.update(sort_by=query['sort_by'],descending=query.get('descending',True))
+    result=execute_query(tables,raw,all_rows=True)
+    records=result['records'][page*50:(page+1)*50]
+    records=[{k:(v[:2000]+'…' if isinstance(v,str) and len(v)>2000 else v) for k,v in r.items()} for r in records]
+    store.require_permission(actor,'use_tools')
+    return {'records':records,'total':result['result_rows'],'page':page,'page_size':50,'table':table['name']}
+
 def handle_ai(store,actor,event):
     store.require_permission(actor,'use_tools')
     tables,version,filename=stock_tables(store,actor)
+    if event.get('action')=='insight_records':return insight_records(store,actor,event,tables,version)
     if event.get('action')=='ai_export':return export_evidence(store,actor,event,tables,version)
     if event.get('action')=='ai_status':
         from grounded_ai import settings
@@ -79,6 +96,13 @@ def handle_ai(store,actor,event):
         result=build_report(tables,report_views(data))
         store.require_permission(actor,'use_tools')
         if stock_tables(store,actor)[1]!=version:raise ValueError('The workbook changed. Generate the report again.')
+        sources=st.session_state.setdefault('_stock_insight_sources',{})
+        for section in result['sections']:
+            for chart in section['charts']:
+                token=secrets.token_urlsafe(18)
+                sources[token]={'version':version,'query':chart['evidence']['query']}
+                chart['evidence']['source_id']=token
+        while len(sources)>100:sources.pop(next(iter(sources)))
         if store.identity(actor)['role']=='admin':
             exports=st.session_state.setdefault('_stock_ai_exports',{})
             for section in result['sections']:
@@ -86,7 +110,7 @@ def handle_ai(store,actor,event):
                     token=secrets.token_urlsafe(18)
                     exports[token]={'version':version,'query':chart['evidence']['query']}
                     chart['evidence']['export_id']=token
-            while len(exports)>60:exports.pop(next(iter(exports)))
+            while len(exports)>100:exports.pop(next(iter(exports)))
         store.log_event(actor,'tool_use','Insights & Graphs')
         return {**result,'version':version}
     context=event.get('context')
@@ -106,5 +130,8 @@ def handle_ai(store,actor,event):
             token=secrets.token_urlsafe(18)
             exports[token]={'version':version,'query':item['query']}
             item['export_id']=token
-        while len(exports)>30:exports.pop(next(iter(exports)))
+        while len(exports)>100:exports.pop(next(iter(exports)))
     return {**result,'version':version}
+
+# Increment with analysis protocol changes to invalidate hot-deployment helpers.
+INSIGHTS_REVISION=2

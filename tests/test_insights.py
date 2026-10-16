@@ -56,3 +56,49 @@ def test_fresh_dispatch_works_with_stale_modules(accounts):
             response=fresh_request(store,viewer,{'action':'generate_insights','consent':True,'version':status['version']})
         assert response['answer']=='Verified report'
         build.assert_called_once()
+
+def test_broad_coverage_uses_distinct_fields_and_safe_composition():
+    tables=[{'id':'T1','name':'Stock','headers':['Material','Stock','Demand','Pending','Segment'],
+             'rows':[['A',5,12,7,'Alpha'],['B',-2,4,6,'Beta'],['C',0,2,2,'Alpha']]}]
+    views=[{'view':0,'title':'Stock overview','table':'Stock'}]
+    plan={'sections':[{'view':0,'charts':[{'title':'Stock','type':'column','label':'Material','value':'Stock','query':{'table':'T1','columns':['Material','Stock'],'limit':10}}]}]}
+    narrative={'overview':'Stock needs review.','sections':[{'view':0,'findings':['Negative balance recorded.'],'actions':['Verify stock.'],'data_quality':['Snapshot only.']}]}
+    with patch('stock_accounts.insights.settings',return_value=('key','model')),patch('stock_accounts.insights.generate',side_effect=[plan,narrative]):
+        result=build_report(tables,views)
+    charts=result['sections'][0]['charts']
+    assert len(charts)>=4
+    assert {'Stock','Demand','Pending','count(*)'}<=set(c['value'] for c in charts)
+    assert any(c['type']=='donut' for c in charts)
+    assert result['sections'][0]['review']['findings']==['Negative balance recorded.']
+    assert result['overview']=='Stock needs review.'
+
+
+def test_trends_and_donuts_require_suitable_data():
+    from stock_accounts.insights import chart_result
+    tables,views,plan=fixture();view={'table_id':'T1'};chart=plan['sections'][0]['charts'][0]
+    assert chart_result(tables,view,{**chart,'type':'line'})['type']=='column'
+    assert chart_result(tables,view,{**chart,'type':'donut'})['type']=='bar'
+    dated=[{'id':'T1','name':'Dated','headers':['Date','Qty'],'rows':[['2026-10-02',2],['2026-10-01',4]]}]
+    c={'title':'Dated','type':'area','label':'Date','value':'Qty','query':{'table':'T1','columns':['Date','Qty']}}
+    result=chart_result(dated,view,c)
+    assert result['type']=='area'
+    assert [r['Date'] for r in result['evidence']['records']]==['2026-10-01','2026-10-02']
+
+
+def test_graph_source_rows_are_paginated_and_authorized(accounts):
+    from stock_accounts.workspace_insights import handle_request as request
+    import streamlit as st
+    store,admin,viewer=accounts
+    rows=[['A'+str(i),i] for i in range(120)]
+    store.save_dataset(admin,'source.xlsx',{'sheets':[{'name':'Stock','headers':['Material','Qty'],'rows':rows}],'tables':[]})
+    version=request(store,viewer,{'action':'ai_status'})['version']
+    st.session_state['_stock_insight_sources']={'token':{'version':version,'query':{'table':'T1','filters':[{'column':'Qty','op':'gte','value':10}]}}}
+    event={'action':'insight_records','version':version,'source_id':'token','page':0}
+    result=request(store,viewer,event)
+    assert result['total']==110 and len(result['records'])==50
+    assert result['records'][0]['Qty']==10
+    assert len(request(store,viewer,{**event,'page':2})['records'])==10
+    with pytest.raises(ValueError,match='expired'):request(store,viewer,{**event,'source_id':'forged'})
+    with pytest.raises(ValueError,match='changed'):request(store,viewer,{**event,'version':'old'})
+    store.update_permissions(admin,'viewer_user',{'use_tools':False});viewer=store.login('viewer_user','Test-viewer-password!123')
+    with pytest.raises(Exception,match='[Pp]ermission|[Aa]ccess'):request(store,viewer,event)
