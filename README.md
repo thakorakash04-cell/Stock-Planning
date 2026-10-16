@@ -157,3 +157,15 @@ workbook revision, source table, columns and every exported row against the
 related material context. This does not grant the broad `download` permission:
 main worksheet tables, Entire workbook, ZIP exports and Ask AI exports retain
 their existing access rules. Downloads are recorded in the administrator log.
+
+Viewers can also download the **Forecast purchasing** table and the calculated
+**Order requirements** material list as Excel, using the current grid filters
+and visible columns. These are scoped exceptions; other table export permissions
+are unchanged. Planning downloads are checked against the result calculated for
+that login session and workbook version, and both downloads are audited.
+
+FG planning inputs, unfinished entries and calculated results stay in memory
+when navigating to another worksheet, Ask AI or Insights and returning during
+the same login. Signing out, loading a newer workbook, choosing Clear plan or
+reloading planning materials starts a new plan. Browser reloads start a new
+in-memory view.

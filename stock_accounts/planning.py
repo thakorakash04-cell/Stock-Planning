@@ -6,7 +6,8 @@ There is deliberately no base-quantity division, FG-stock deduction, recursive
 BOM explosion or zero clamp: none is present in the master's PS query.
 """
 from __future__ import annotations
-import math
+import math,secrets
+import streamlit as st
 
 HEADERS=['Component','Component(text)','Material Type','Required Quantity',
          'Total Available Stock','Total On-order Stock','Need to Order Quantity']
@@ -93,4 +94,29 @@ def handle_planning(store,actor,event):
     if event.get('version')!=version:raise ValueError('The workbook changed. Reload planning materials and enter your quantities again.')
     result=calculate(current['data'],event.get('entries'))
     store.record_access(actor,'Order requirements planning')
-    return {**result,'version':version}
+    plan_id=secrets.token_urlsafe(18)
+    st.session_state['_order_plan_export']={'owner':(actor.username,actor.session_id),'version':version,'plan_id':plan_id,'table':result}
+    return {**result,'version':version,'plan_id':plan_id}
+
+
+def export_planning_table(store,actor,event):
+    from .matched_export import export_table
+    current=store.get_dataset(actor)
+    if not current or event.get('version')!=current['version']:
+        raise ValueError('The workbook changed. Reload this table before downloading.')
+    source=event.get('source')
+    names={'forecast_purchasing':'Forecast Need to Order List','order_requirements_saved':'Need to Order Sheet-B.O. PS'}
+    if not isinstance(source,str):raise ValueError('Invalid purchasing table.')
+    if source in names:
+        table=next((s for s in current['data'].get('sheets',[]) if s['name']==names[source]),None)
+        if table is None:raise ValueError('This purchasing worksheet is unavailable.')
+    elif source=='order_requirements_plan':
+        saved=st.session_state.get('_order_plan_export',{})
+        if saved.get('owner')!=(actor.username,actor.session_id) or saved.get('version')!=current['version'] or not saved.get('plan_id') or saved.get('plan_id')!=event.get('plan_id'):
+            raise ValueError('This planning result has expired. Calculate the plan again before downloading.')
+        table=saved['table']
+    else:raise ValueError('Only Forecast purchasing and Order requirements tables are available for this download.')
+    label='Forecast purchasing' if source=='forecast_purchasing' else 'Order requirements'
+    return export_table(store,actor,event,current,table,label,label.replace(' ','_')+'.xlsx')
+
+TABLE_EXPORT_REVISION=1

@@ -15,8 +15,12 @@ for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
 # Refresh the dispatcher when an already-running process gains planning RPCs.
-if getattr(_workspace,'PLANNING_REVISION',0)!=2:
+if getattr(_workspace,'PLANNING_REVISION',0)!=3:
     importlib.reload(_workspace)
+from stock_accounts import planning as _planning, matched_export as _matched_export
+for _module in (_planning,_matched_export):
+    if getattr(_module,'TABLE_EXPORT_REVISION',0)!=1:
+        importlib.reload(_module)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 

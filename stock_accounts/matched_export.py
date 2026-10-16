@@ -34,6 +34,11 @@ def export_matched(store,actor,event):
     if table['name']=='Calendar':
         table={**table,'headers':table['headers']+['Relationship to selection'],
                'rows':[r+['Date in related source records'] for r in table['rows']]}
+    return export_table(store,actor,event,current,table,'Value matched records: '+table['name'],'Matched_records.xlsx')
+
+
+def export_table(store,actor,event,current,table,resource,filename):
+    """Validate a grid projection against one server-selected, approved table."""
     headers=event.get('headers');rows=event.get('rows')
     if not isinstance(headers,list) or not headers or any(not isinstance(h,str) or h not in table['headers'] for h in headers) or len(set(headers))!=len(headers):
         raise ValueError('Invalid matched table columns.')
@@ -44,7 +49,7 @@ def export_matched(store,actor,event):
     for r in rows:
         if not isinstance(r,list) or len(r)!=len(headers) or any(v is not None and not isinstance(v,(str,int,float)) for v in r) or tuple(r) not in allowed:
             raise ValueError('The download must contain only records matching the selected value.')
-    workbook=Workbook(write_only=True);sheet=workbook.create_sheet('Matched records')
+    workbook=Workbook(write_only=True);sheet=workbook.create_sheet(filename.removesuffix('.xlsx').replace('_',' ')[:31])
     from openpyxl.cell import WriteOnlyCell
     def literal(v):
         if isinstance(v,str):
@@ -60,6 +65,8 @@ def export_matched(store,actor,event):
         store.require(db,actor)
         revision=store.run(db,"SELECT version FROM datasets WHERE id='current'").fetchone()
         if not revision or revision['version']!=current['version']:raise ValueError('The workbook changed. Reopen the selected value.')
-        store._log(db,actor.username,'export','Value matched records: '+table['name'],actor.session_id)
-    return {'content':base64.b64encode(output.getvalue()).decode(),'filename':'Matched_records.xlsx',
+        store._log(db,actor.username,'export',resource,actor.session_id)
+    return {'content':base64.b64encode(output.getvalue()).decode(),'filename':filename,
             'mime':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
+
+TABLE_EXPORT_REVISION=1
