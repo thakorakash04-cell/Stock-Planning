@@ -24,7 +24,7 @@ from stock_accounts import insights as _insights, assistant_insights as _assista
 for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
-if getattr(_assistant,'AI_EXPORT_REVISION',0)!=1:importlib.reload(_assistant)
+if getattr(_assistant,'AI_EXPORT_REVISION',0)!=1 or getattr(_assistant,'PLANNING_ASSISTANT_REVISION',0)!=1:importlib.reload(_assistant)
 # Refresh the dispatcher when an already-running process gains planning RPCs.
 if getattr(_workspace,'PLANNING_REVISION',0)!=10:
     importlib.reload(_workspace)
@@ -33,7 +33,7 @@ for _module in (_planning,_matched_export):
     if getattr(_module,'TABLE_EXPORT_REVISION',0)!=(2 if _module is _matched_export else 4):
         importlib.reload(_module)
 from stock_accounts import production as _production
-if getattr(_production,'REVISION',0)!=6:importlib.reload(_production)
+if getattr(_production,'REVISION',0)!=7:importlib.reload(_production)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts import auth as _account_auth
 if getattr(_account_auth,'PRODUCTION_ACCESS_REVISION',0)!=4:importlib.reload(_account_auth)

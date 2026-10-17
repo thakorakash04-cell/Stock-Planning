@@ -20,5 +20,12 @@ async function select(label,value){await act(async()=>{const el=document.querySe
  await act(async()=>{root.render(React.createElement(Grid,props('layout-b')));await tick()});assert.equal(document.querySelector('thead .sortheading').textContent,'Code');
  await act(async()=>{root.render(React.createElement(Grid,props('layout-a')));await tick()});assert.equal(document.querySelector('thead .sortheading').textContent,'Warehouse');
  await act(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent==='Reset table view').click();await tick()});assert.equal(document.querySelector('thead .sortheading').textContent,'Code');
+ await act(async()=>{root.render(React.createElement(Grid,{headers:['Qty'],rows:[[null],[0],[10]],storageKey:'statistics'}));await tick()});
+ await select('Calculation type','mean');
+ async function chooseQty(){await act(async()=>{const panel=document.querySelector('[aria-label="Calculation type"]').closest('.gridsettingspanel');[...panel.querySelectorAll('label')].find(l=>l.textContent==='Qty').querySelector('input').click();await tick()})}
+ await chooseQty();assert.ok(document.querySelector('tfoot').textContent.includes('AVERAGE5'),'Average ignores blanks and includes zero');
+ await select('Calculation type','sum');await chooseQty();assert.equal(document.querySelectorAll('tfoot tr').length,2,'Sum and average can be shown together');
+ assert.ok(document.querySelector('tfoot').textContent.includes('SUM10'));
+ assert.deepEqual(prefs['grid:statistics'].stats.mean,['Qty']);
  await act(async()=>root.unmount());console.log('Passed: reordered headers, numeric sorting, original drill-down indices, export layout and independent saved table views.');
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -6,7 +6,7 @@ from .access import require_menu
 from .clock import IST,display as timestamp
 from .production_history import record as history_record
 
-REVISION=6
+REVISION=7
 QC_HEADERS=['Material Code','Description','Batch','Order Quantity','Confirmed Quantity','Latest 101 Date','Order Number','Material Type']
 ONGOING_HEADERS=['Order Number','Material Type','Material Code','Description','Batch','Order Quantity','Basic Start Date','Expected End Date','Expected FG Quantity','Estimate Basis','Last Saved By','Last Saved At (IST)']
 PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At (IST)','Segment']
@@ -112,7 +112,7 @@ def shared(store,actor):
 
 
 
-def read(store,actor):
+def read(store,actor,*,archive=True):
     require_menu(store,actor,3);current=store.get_dataset(actor)
     if not current:raise ValueError('Upload a workbook first.')
     # Upcoming plans remain available even when an old upload lacks source tables.
@@ -150,7 +150,7 @@ def read(store,actor):
         item['segments']=[chosen] if chosen else sorted(inferred)
         item['row'].append(', '.join(item['segments']) or 'Unassigned')
     matched=[item for item in result['upcoming'] if item.get('materialCode') and (ident(item['materialCode']).casefold(),ident(item['row'][2]).casefold()) in production_pairs]
-    if matched:
+    if matched and archive:
         # Archive automatically once an order exists; retain history and avoid
         # resurrecting old plans when a later SAP dump omits older orders.
         with store.transaction() as db:

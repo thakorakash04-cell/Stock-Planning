@@ -9,15 +9,17 @@ from workbook import forecast_summary
 def stock_tables(store,actor):
     from .workspace_insights import workspace_payload
     data,model_tables,version=workspace_payload(store,actor)
+    from .planning_assistant import knowledge
+    cache_key=(version,str(data.get('planningRevision')),knowledge()['revision'],str(store.identity(actor)['permissions']))
     cached=st.session_state.get('_stock_ai_tables')
-    if not cached or cached[0]!=version:
+    if not cached or cached[0]!=cache_key:
         frames=[(s['name'],pd.DataFrame(s['rows'],columns=s['headers'])) for s in data['sheets']]
         if len(data['sheets'])>4:
             sheet=data['sheets'][4]
             if sheet['rows'] and len(sheet['headers'])>=7:
                 frames.append((sheet['name']+' — product totals',forecast_summary(pd.DataFrame(sheet['rows'],columns=sheet['headers']))))
         frames.extend((t['name'],pd.DataFrame(t['rows'],columns=t['headers'])) for t in model_tables)
-        cached=(version,tables_from_frames(frames));st.session_state['_stock_ai_tables']=cached
+        cached=(cache_key,tables_from_frames(frames));st.session_state['_stock_ai_tables']=cached
     return cached[1],version,data['filename']
 
 def export_evidence(store,actor,event,tables,version):
@@ -26,6 +28,11 @@ def export_evidence(store,actor,event,tables,version):
     entry=st.session_state.get('_stock_ai_exports',{}).get(str(event.get('export_id','')))
     if not entry:raise ValueError('This download has expired. Ask the question again to generate a new table.')
     if entry['version']!=version or event.get('version')!=version:raise ValueError('The workbook changed. Ask the question again before downloading.')
+    if 'table' in entry:
+        from .matched_export import export_table
+        current=store.get_dataset(actor)
+        table=entry['table'];projection={**event,'headers':event.get('headers',table['headers']),'rows':event.get('rows',table['rows'])}
+        return export_table(store,actor,projection,current,table,'Planning assistant results','Planning_assistant_result.xlsx')
     query=entry['query'];table=next((t for t in tables if t['id']==query['table']),None)
     if table is None:raise ValueError('The source table is no longer available. Ask the question again.')
     result=execute_query(tables,query,all_rows=True)
@@ -84,10 +91,12 @@ def handle_ai(store,actor,event):
     if event.get('action')=='ai_status':
         from grounded_ai import settings
         key,model=settings()
-        return {'configured':bool(key),'model':model,'version':version,'tables':len(tables),'filename':filename}
+        from .planning_assistant import knowledge
+        return {'configured':bool(key),'model':model,'version':version,'tables':len(tables),'filename':filename,'knowledge_revision':knowledge()['revision']}
     if event.get('action')=='ai_clear':
         thread=hashlib.sha256(json_text([version,event.get('context')]).encode()).hexdigest()
         st.session_state.setdefault('_stock_ai_threads',{}).pop(thread,None)
+        st.session_state.setdefault('_planning_scenarios',{}).pop(thread,None)
         return {'ok':True}
     if event.get('consent') is not True:raise ValueError('Enable sharing the question and relevant loaded records with Google Gemini first.')
     if event.get('version')!=version:raise ValueError('The workbook changed. Refresh this chat and ask again using the current data.')
@@ -120,22 +129,29 @@ def handle_ai(store,actor,event):
     threads=st.session_state.setdefault('_stock_ai_threads',{})
     history=threads.get(thread,[])
     question=event.get('question')
-    result=ask(tables,question,history,context,scope='Stock Planning: '+filename+'. Saved workbook snapshot; mixed units and repeated monthly stock must not be summed. No cross-table joins or production feasibility calculation.')
+    from .planning_assistant import reply
+    scenarios=st.session_state.setdefault('_planning_scenarios',{})
+    result=reply(store,actor,tables,question,history,context,scenarios.get(thread))
+    scenarios[thread]=result.pop('scenario',scenarios.get(thread,{}))
+    while len(scenarios)>10:scenarios.pop(next(iter(scenarios)))
     # Recheck revocation before returning the provider result.
     store.require_permission(actor,'use_tools')
-    threads[thread]=(history+[{'role':'user','text':question},{'role':'assistant','text':result['answer']}])[-12:]
+    threads[thread]=(history+[{'role':'user','text':question},{'role':'assistant','text':result['answer']}])[-40:]
     while len(threads)>10:threads.pop(next(iter(threads)))
     store.log_event(actor,'tool_use','Ask AI')
-    if store.identity(actor)['role']=='admin':
-        exports=st.session_state.setdefault('_stock_ai_exports',{})
-        for item in result.get('evidence',[]):
+    exports=st.session_state.setdefault('_stock_ai_exports',{})
+    for item in result.get('evidence',[]):
+        tool_table=item.pop('_table',None)
+        if store.identity(actor)['role']=='admin':
             token=secrets.token_urlsafe(18)
-            exports[token]={'version':version,'query':item['query']}
+            exports[token]={'version':version,'table':tool_table} if tool_table else {'version':version,'query':item['query']}
             item['export_id']=token
-        while len(exports)>100:exports.pop(next(iter(exports)))
+    while len(exports)>100:exports.pop(next(iter(exports)))
     return {**result,'version':version}
 
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
 
 AI_EXPORT_REVISION=1
+
+PLANNING_ASSISTANT_REVISION=1
