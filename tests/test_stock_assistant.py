@@ -107,3 +107,24 @@ def test_grouped_download_contains_result_and_underlying_records(accounts):
     workbook=load_workbook(io.BytesIO(base64.b64decode(file['content'])))
     assert workbook['Result table']['A2'].value==12
     assert workbook['Matching records'].max_row==3
+
+def test_ai_excel_result_projection_is_filtered_ordered_and_validated(accounts):
+    import base64,io
+    from openpyxl import load_workbook
+    from grounded_ai import execute_query
+    from stock_accounts.assistant import stock_tables
+    store,admin,viewer=accounts;tables,version,_=stock_tables(store,admin)
+    query={'table':'T1','limit':20}
+    result={'answer':'Matches','evidence':[{'citation':'Q1',**execute_query(tables,query)}]}
+    with patch('stock_accounts.assistant.ask',return_value=result):
+        answer=handle_request(store,admin,{'action':'ask_ai','question':'Show materials','version':version,'consent':True})
+    evidence=answer['evidence'][0];record=evidence['records'][0]
+    names=list(record);headers=list(reversed(names));row=[record[h] for h in headers]
+    event={'action':'ai_export','export_id':evidence['export_id'],'version':version,'headers':headers,'rows':[row]}
+    file=handle_request(store,admin,event);wb=load_workbook(io.BytesIO(base64.b64decode(file['content'])))
+    assert list(wb['Result table'].values)==[tuple(headers),tuple(row)]
+    assert 'Matching records' not in wb.sheetnames
+    with pytest.raises(ValueError):handle_request(store,admin,{**event,'rows':[['forged']*len(headers)]})
+    with pytest.raises(ValueError):handle_request(store,admin,{**event,'headers':['password']})
+    empty=handle_request(store,admin,{**event,'rows':[]})
+    assert list(load_workbook(io.BytesIO(base64.b64decode(empty['content'])))['Result table'].values)==[tuple(headers)]

@@ -38,9 +38,9 @@ def export_evidence(store,actor,event,tables,version):
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
     workbook=Workbook(write_only=True)
-    def write_sheet(name,records):
+    def write_sheet(name,records,selected_headers=None):
         sheet=workbook.create_sheet(name)
-        headers=list(records[0]) if records else []
+        headers=selected_headers if selected_headers is not None else list(records[0]) if records else []
         def cell(value):
             if isinstance(value,str):
                 if len(value)>32767:raise ValueError('A text field exceeds Excel’s cell limit. Narrow the exported columns or filters.')
@@ -48,8 +48,10 @@ def export_evidence(store,actor,event,tables,version):
             return value
         sheet.append([cell(h) for h in headers])
         for record in records:sheet.append([cell(record.get(h)) for h in headers])
-    write_sheet('Result table',result['records'])
-    write_sheet('Matching records',matching['records'])
+    from .ai_table_view import project
+    displayed=project(result['records'],event)
+    write_sheet('Result table',displayed,event.get('headers'))
+    if 'headers' not in event:write_sheet('Matching records',matching['records'])
     write_sheet('Query details',[{'Source table':table['name'],'Matched records':matching['matched_records'],'Result rows':result['result_rows'],'Workbook version':version,'Query':json_text(query)}])
     output=io.BytesIO();workbook.save(output)
     if output.tell()>25_000_000:raise ValueError('The Excel export exceeds 25 MB. Narrow your question filters.')
@@ -135,3 +137,5 @@ def handle_ai(store,actor,event):
 
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
+
+AI_EXPORT_REVISION=1
