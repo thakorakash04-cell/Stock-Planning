@@ -110,6 +110,9 @@ def export_planning_table(store,actor,event):
     if source in names:
         table=next((s for s in current['data'].get('sheets',[]) if s['name']==names[source]),None)
         if table is None:raise ValueError('This purchasing worksheet is unavailable.')
+        if source=='forecast_purchasing':
+            from .lead_time import purchasing
+            table=purchasing(current['data'])
     elif source=='order_requirements_plan':
         saved=st.session_state.get('_order_plan_export',{})
         if saved.get('owner')!=(actor.username,actor.session_id) or saved.get('version')!=current['version'] or not saved.get('plan_id') or saved.get('plan_id')!=event.get('plan_id'):
@@ -119,4 +122,4 @@ def export_planning_table(store,actor,event):
     label='Forecast purchasing' if source=='forecast_purchasing' else 'Order requirements'
     return export_table(store,actor,event,current,table,label,label.replace(' ','_')+'.xlsx')
 
-TABLE_EXPORT_REVISION=1
+TABLE_EXPORT_REVISION=2

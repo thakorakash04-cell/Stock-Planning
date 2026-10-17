@@ -14,11 +14,16 @@ def ui_payload(current,identity=None):
     from .access import allowed
     if current:
         dataset=current["data"]
+        from .lead_time import build,purchasing
+        lead,averages=build(dataset)
+        purchase=purchasing(dataset,averages)
+        dataset={**dataset,'sheets':[purchase if i==5 and purchase else sheet for i,sheet in enumerate(dataset['sheets'])]}
+        if identity and not allowed(identity,9):lead={**lead,'rows':[]}
         if identity:
             dataset={**dataset,'sheets':[{**sheet,'rows':sheet['rows'] if allowed(identity,i) else []} for i,sheet in enumerate(dataset['sheets'])]}
         mapping=segment_map(dataset.get("tables",[]))
-        return {"accessibleTabs":[i for i in range(9) if not identity or allowed(identity,i)],"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
-    return {"accessibleTabs":[i for i in range(9) if not identity or allowed(identity,i)],"filename":"No workbook uploaded yet","updatedAt":None,"asOf":"—","sheets":[{"name":s[0],"headers":["Material","Description"],"rows":[]} for s in SPECS],"segmentMap":{}},[],"empty"
+        return {"accessibleTabs":[i for i in range(10) if not identity or allowed(identity,i)],"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"leadTime":lead,"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
+    return {"accessibleTabs":[i for i in range(10) if not identity or allowed(identity,i)],"filename":"No workbook uploaded yet","updatedAt":None,"asOf":"—","sheets":[{"name":s[0],"headers":["Material","Description"],"rows":[]} for s in SPECS],"segmentMap":{}},[],"empty"
 
 def workspace_payload(store,actor):
     # Check authorization and the shared version even when a session has cached data.
@@ -29,7 +34,7 @@ def workspace_payload(store,actor):
         row=store.run(db,"SELECT version,updated_at FROM datasets WHERE id='current'").fetchone()
         revision=(row['version'],row['updated_at']) if row else None
     identity=store.identity(actor)
-    key=(actor.username,actor.session_id,revision,str(identity['permissions']))
+    key=(actor.username,actor.session_id,revision,str(identity['permissions']),8)
     cached=st.session_state.get('_workspace_payload')
     if not cached or cached[0]!=key:
         cached=(key,ui_payload(store.get_dataset(actor),identity))

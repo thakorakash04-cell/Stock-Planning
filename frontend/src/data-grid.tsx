@@ -5,7 +5,7 @@ import {can,authorizeExport} from './bridge';
 import {useViewPreference} from './view-preference';
 import {filterRows,sumColumn,cellKey,type Cell,type ColumnFilter} from './grid-utils';
 const fmt=(v:Cell)=>v===null?'—':typeof v==='number'?v.toLocaleString('en-IN',{maximumFractionDigits:4}):v;
-export default function DataGrid({headers,rows,storageKey,onCell,groupBy=-1,filename='Table',totalForColumn,matchedExport,exportLabel='Download matched records (Excel)',numberPrecision=4}:{headers:string[];rows:Cell[][];storageKey:string;onCell?:(row:Cell[],column:number)=>void;groupBy?:number;filename?:string;totalForColumn?:(rows:Cell[][],column:number)=>number;matchedExport?:(headers:string[],rows:Cell[][])=>Promise<void>;exportLabel?:string;numberPrecision?:number}){
+export default function DataGrid({headers,rows,storageKey,onCell,groupBy=-1,filename='Table',totalForColumn,matchedExport,exportLabel='Download matched records (Excel)',numberPrecision=4,onFilteredRows}:{headers:string[];rows:Cell[][];storageKey:string;onCell?:(row:Cell[],column:number)=>void;groupBy?:number;filename?:string;totalForColumn?:(rows:Cell[][],column:number)=>number;matchedExport?:(headers:string[],rows:Cell[][])=>Promise<void>;exportLabel?:string;numberPrecision?:number;onFilteredRows?:(rows:Cell[][])=>void}){
  const fmt=(v:Cell)=>v===null?'—':typeof v==='number'?v.toLocaleString('en-IN',{maximumFractionDigits:numberPrecision}):v;
  const total=(rr:Cell[][],i:number)=>totalForColumn?totalForColumn(rr,i):sumColumn(rr,i);
  const [view,setView]=useViewPreference('grid:'+storageKey,{filters:{} as Record<string,ColumnFilter>,hidden:[] as string[],sums:[] as string[],sort:{column:'',dir:1}});
@@ -22,6 +22,7 @@ export default function DataGrid({headers,rows,storageKey,onCell,groupBy=-1,file
  useEffect(()=>{const onKey=(e:KeyboardEvent)=>{if(e.key!=='Escape')return;if(open>=0){e.preventDefault();setOpen(-1)}else if(maximized){e.preventDefault();setMaximized(false)}};document.addEventListener('keydown',onKey);return()=>document.removeEventListener('keydown',onKey)},[maximized,open]);
  const visible=headers.map((h,i)=>({h,i})).filter(c=>!hidden.includes(c.h));const numeric=headers.map((h,i)=>({h,i})).filter(c=>rows.some(r=>typeof r[c.i]==='number'));
  const filtered=useMemo(()=>{const a=filterRows(rows,filters,headers);if(sort.col<0)return a;return [...a].sort((a,b)=>{const x=a[sort.col],y=b[sort.col];return (typeof x==='number'&&typeof y==='number'?x-y:String(x??'').localeCompare(String(y??'')))*sort.dir})},[rows,filterSignature,headers,sort.col,sort.dir]);
+ useEffect(()=>{onFilteredRows?.(filtered)},[filtered,onFilteredRows]);
  useEffect(()=>{setPage(0);setExpanded(new Set())},[filterSignature,rows,sort.col,sort.dir,groupBy]);
  const groups=groupBy<0?null:Object.entries(filtered.reduce((a,r)=>{const k=String(r[groupBy]??'Blank');(a[k]??=[]).push(r);return a},{} as Record<string,Cell[][]>));const length=groups?.length??filtered.length;const currentPage=Math.min(page,Math.max(0,Math.ceil(length/40)-1));
  const changeFilter=(h:string,f:Partial<ColumnFilter>)=>setFilters(old=>({...old,[h]:{...old[h],...f}}));const active=Object.values(filters).filter(f=>f.text||f.values?.length).length;

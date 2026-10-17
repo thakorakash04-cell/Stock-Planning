@@ -55,7 +55,7 @@ def test_startup_refreshes_dispatcher_from_before_planning():
         with patch.object(workspace,'PLANNING_REVISION',0),patch.object(workspace,'handle_request',stale):
             at.run()
             assert not at.exception
-            assert workspace.PLANNING_REVISION==7
+            assert workspace.PLANNING_REVISION==8
             assert workspace.handle_request is not stale
             assert account_store.Store is old_store_class
         st.cache_resource.clear()
