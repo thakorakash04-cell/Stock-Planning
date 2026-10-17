@@ -31,7 +31,7 @@ from stock_accounts import production as _production
 if getattr(_production,'REVISION',0)!=4:importlib.reload(_production)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts import auth as _account_auth
-if getattr(_account_auth,'PRODUCTION_ACCESS_REVISION',0)!=1:importlib.reload(_account_auth)
+if getattr(_account_auth,'PRODUCTION_ACCESS_REVISION',0)!=2:importlib.reload(_account_auth)
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 
 st.set_page_config(page_title="Stock & Planning",page_icon="📦",layout="wide")
@@ -190,7 +190,7 @@ def main():
         st.title("Stock & Planning — deployment setup")
         st.info("The owner must configure DATABASE_URL, ADMIN_USERNAME and ADMIN_PASSWORD in Streamlit Cloud Secrets. See README.md and secrets.example.toml in the repository. No default password is enabled.")
         st.stop()
-    try:store=initialize_account_store(cfg["DATABASE_URL"],cfg["ADMIN_USERNAME"],cfg["ADMIN_PASSWORD"])
+    try:store=initialize_account_store(cfg["DATABASE_URL"],cfg["ADMIN_USERNAME"],cfg["ADMIN_PASSWORD"],store_revision="2026-10-17-access-rights-v2")
     except Exception:
         st.error("Cannot initialize the account database. Check the database connection and admin settings in Streamlit Secrets.");st.stop()
     actor=st.session_state.get("actor")

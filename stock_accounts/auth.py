@@ -1,5 +1,5 @@
 """Shared account screens. All authorization is repeated by Store operations."""
-import os,time
+import os,time,json
 from datetime import datetime,timezone
 import pandas as pd
 import streamlit as st
@@ -9,7 +9,7 @@ APP_TITLE='Stock & Planning'
 from .access import MENU_LABELS
 PERMISSION_LABELS={'download': 'Download / export data', 'update_data': 'Upload and replace shared workbook', 'use_tools': 'Use Ask AI and Insights (share relevant records with Gemini)', 'edit_production':'Edit ongoing production expected quantity and end date', 'edit_upcoming':'Add and edit shared upcoming production plans', **{'menu_'+str(i):'Open '+label for i,label in enumerate(MENU_LABELS)}}
 @st.cache_resource
-def initialize(url,username,password,store_revision="2026-10-15-login-fix"):
+def initialize(url,username,password,store_revision="2026-10-17-access-rights-v2"):
     # The revision invalidates pre-deployment cached Store instances.
     store=Store(url);store.bootstrap_admin(username,password);return store
 
@@ -48,6 +48,8 @@ def format_time(value):
 def user_page(store,actor):
     require_admin(store,actor)
     st.title('Manage viewer accounts')
+    notice=st.session_state.pop('_access_rights_notice',None)
+    if notice:st.success(notice)
     st.caption('Only the administrator can set access rights. Permission changes, disabling accounts and password resets revoke existing user sessions.')
     users=store.users(actor)
     display=[{'Username':u['username'],'Role':u['role'],'Active':bool(u['active']),
@@ -66,13 +68,27 @@ def user_page(store,actor):
     if viewers:
         selected=st.selectbox('Viewer',[u['username'] for u in viewers],key='selected_account')
         user=next(u for u in viewers if u['username']==selected)
+        # Sync keyed widgets to persisted rights after saving or switching users.
+        fingerprint=(selected,json.dumps(user['permissions'],sort_keys=True))
+        if st.session_state.get('_access_rights_fingerprint')!=fingerprint:
+            for key in PERMISSION_LABELS:
+                st.session_state.pop('permission_'+selected+'_'+key,None)
+            st.session_state['_access_rights_fingerprint']=fingerprint
         with st.form('permissions_'+selected):
             st.subheader('Access rights')
-            st.caption('Choose the sections this viewer can open and the actions they can perform. Production edits are shared with everyone who can open Production.')
+            st.caption('Choose the sections this viewer can open and the actions they can perform. Production edit rights also require Open Production. Ask AI and Insights require both their Open section right and Use Ask AI and Insights.')
             permissions={key:st.checkbox(label,value=user['permissions'].get(key,False),key='permission_'+selected+'_'+key) for key,label in PERMISSION_LABELS.items()}
             save=st.form_submit_button('Save access rights',type='primary')
         if save:
-            store.update_permissions(actor,selected,permissions);st.success('Permissions saved. The user must sign in again.');st.rerun()
+            try:
+                store.update_permissions(actor,selected,permissions)
+                saved_user=next(u for u in store.users(actor) if u['username']==selected)
+                if any(saved_user['permissions'].get(k)!=v for k,v in permissions.items()):
+                    raise ValueError('The saved rights could not be verified. Refresh this page and retry.')
+            except (ValueError,PermissionError) as exc:st.error(str(exc))
+            else:
+                st.session_state['_access_rights_notice']='Access rights saved for '+selected+'. Existing viewer sessions were signed out; sign in again to apply the new rights.'
+                st.rerun()
         with st.form('update_viewer',clear_on_submit=True):
             st.subheader('Reset or enable/disable viewer')
             action=st.selectbox('Action',['Reset password','Disable account','Enable account'])
@@ -152,4 +168,4 @@ def admin_download(*args,**kwargs):
     if clicked:st.session_state._account_store.log_event(st.session_state.actor,'export','File download')
     return clicked
 
-PRODUCTION_ACCESS_REVISION=1
+PRODUCTION_ACCESS_REVISION=2

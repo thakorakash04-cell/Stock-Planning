@@ -59,3 +59,18 @@ def test_startup_refreshes_dispatcher_from_before_planning():
             assert workspace.handle_request is not stale
             assert account_store.Store is old_store_class
         st.cache_resource.clear()
+
+
+def test_startup_uses_new_account_cache_revision_after_permission_upgrade():
+    from stock_accounts.auth import initialize
+    from stock_accounts.store import Store
+    with tempfile.TemporaryDirectory() as folder:
+        url='sqlite:///'+str(Path(folder)/'permission-cache.db')
+        legacy=initialize(url,'startup_admin','Startup-admin-password!123',store_revision='2026-10-15-login-fix')
+        at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30)
+        at.secrets.update({'DATABASE_URL':url,'ADMIN_USERNAME':'startup_admin','ADMIN_PASSWORD':'Startup-admin-password!123'})
+        at.run();assert not at.exception
+        current=initialize(url,'startup_admin','Startup-admin-password!123',store_revision='2026-10-17-access-rights-v2')
+        assert current is not legacy
+        assert isinstance(current,Store)
+    st.cache_resource.clear()

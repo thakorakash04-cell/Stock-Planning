@@ -66,3 +66,32 @@ class AccountScreenTests(unittest.TestCase):
             self.assertNotIn('_account_page',at.session_state)
         else:self.assertFalse(any(x.label=='Manage users' for x in at.toggle))
         self.assertFalse(any(x.value=='Access log' for x in at.subheader))
+
+    def test_production_and_menu_rights_save_repeatedly_with_confirmation(self):
+        at=self.login('admin_user','Initial-admin-password!123');self.open_screen(at,'users')
+        old_viewer=self.store.login('viewer_user','Initial-viewer-password!123')
+        at.checkbox(key='permission_viewer_user_edit_production').set_value(True)
+        at.checkbox(key='permission_viewer_user_edit_upcoming').set_value(True)
+        at.checkbox(key='permission_viewer_user_menu_0').set_value(False)
+        next(b for b in at.button if b.label=='Save access rights').click().run()
+        self.assertFalse(at.exception)
+        self.assertTrue(any('Access rights saved for viewer_user' in x.value for x in at.success))
+        with self.assertRaises(AccessDenied):self.store.identity(old_viewer)
+        viewer=self.store.login('viewer_user','Initial-viewer-password!123')
+        rights=self.store.identity(viewer)['permissions']
+        self.assertTrue(rights['edit_production'] and rights['edit_upcoming']);self.assertFalse(rights['menu_0'])
+        self.assertTrue(at.checkbox(key='permission_viewer_user_edit_production').value)
+        self.assertFalse(at.checkbox(key='permission_viewer_user_menu_0').value)
+        at.checkbox(key='permission_viewer_user_edit_production').set_value(False)
+        at.checkbox(key='permission_viewer_user_menu_0').set_value(True)
+        next(b for b in at.button if b.label=='Save access rights').click().run()
+        self.assertFalse(at.exception)
+        viewer=self.store.login('viewer_user','Initial-viewer-password!123')
+        rights=self.store.identity(viewer)['permissions'];self.assertFalse(rights['edit_production']);self.assertTrue(rights['menu_0'])
+
+    def test_permission_save_error_is_shown_without_crashing(self):
+        at=self.login('admin_user','Initial-admin-password!123');self.open_screen(at,'users')
+        with patch('stock_accounts.store.Store.update_permissions',side_effect=ValueError('Permission settings need refresh')):
+            next(b for b in at.button if b.label=='Save access rights').click().run()
+        self.assertFalse(at.exception)
+        self.assertTrue(any('Permission settings need refresh' in x.value for x in at.error))
