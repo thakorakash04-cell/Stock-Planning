@@ -11,7 +11,7 @@ const send=(type:string,extra:Record<string,unknown>)=>window.parent.postMessage
 export const isAdmin=()=>state?.role==='admin';
 export const can=(permission:string)=>isAdmin()||state?.permissions?.[permission]===true;
 export async function authorizeExport(){try{await rpc('export');return true}catch(e){alert(e instanceof Error?e.message:String(e));return false}}
-export function rpc(action:string,payload:Record<string,unknown>={}):Promise<any>{const work=()=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();waiting.set(id,{resolve,reject});send('streamlit:setComponentValue',{value:{id,action,activity:lastActivity,...payload},dataType:'json'});setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(new Error('Request timed out. Please retry.'))}},120000)});const result=queue.then(work);queue=result.catch(()=>{});return result;}
+export function rpc(action:string,payload:Record<string,unknown>={}):Promise<any>{const work=()=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();waiting.set(id,{resolve,reject});send('streamlit:setComponentValue',{value:{...payload,id,action,activity:lastActivity},dataType:'json'});setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(new Error('Request timed out. Please retry.'))}},120000)});const result=queue.then(work);queue=result.catch(()=>{});return result;}
 // Navigation must not wait behind an export, heartbeat or timed-out RPC.
 export function openAccount(action:'open_admin'|'open_password'){
  send('streamlit:setComponentValue',{value:{id:crypto.randomUUID(),action,activity:lastActivity},dataType:'json'});

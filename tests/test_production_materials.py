@@ -46,7 +46,7 @@ def test_saved_selection_is_canonical_and_availability_uses_saved_quantity(accou
     store,admin,viewer=accounts;store.save_dataset(admin,'master.xlsx',data());status=read(store,viewer)
     plan=save(store,admin,{'kind':'upcoming','version':status['version'],'revision':0,'value':{'materialCode':'A','product':'forged','description':'forged','batch':'NEXT','quantity':100,'startDate':'2026-11-01','endDate':'2026-11-02'}})['upcoming'][0]
     assert plan['row'][:2]==['A','Size A'] and plan['materialCode']=='A'
-    event={'action':'production_availability','version':status['version'],'id':plan['id'],'revision':1,'quantity':1}
+    event={'action':'production_availability','version':status['version'],'plan_id':plan['id'],'revision':1,'quantity':1}
     result=handle_request(store,viewer,event)
     assert result['quantity']==100 and result['rows'][0][5]==20
     with pytest.raises(ValueError,match='changed'):handle_request(store,viewer,{**event,'revision':0})

@@ -40,7 +40,7 @@ def test_snapshot_windows_material_batch_matching_latest_101_and_fg_yield():
 def test_shared_edits_permission_revisions_and_persistence(accounts):
     store,admin,viewer=accounts;store.save_dataset(admin,'master.xlsx',fixture())
     status=read(store,viewer);item=status['ongoing'][0]
-    event={'kind':'ongoing','version':status['version'],'id':item['id'],'revision':0,'value':{'quantity':88,'endDate':'2026-10-28'}}
+    event={'kind':'ongoing','version':status['version'],'plan_id':item['id'],'revision':0,'value':{'quantity':88,'endDate':'2026-10-28'}}
     with pytest.raises(PermissionError):save(store,viewer,event)
     store.update_permissions(admin,'viewer_user',{'edit_production':True,'edit_upcoming':True});viewer=store.login('viewer_user','Test-viewer-password!123')
     updated=save(store,viewer,event);edited=next(i for i in updated['ongoing'] if i['id']==item['id'])
@@ -84,7 +84,7 @@ def test_month_windows_roll_over_year_and_future_release_does_not_hide_qc():
 
 def test_stale_workbook_cannot_save_and_disabled_edit_right_stays_denied(accounts):
     store,admin,viewer=accounts;store.save_dataset(admin,'master.xlsx',fixture());status=read(store,admin)
-    item=status['ongoing'][0];event={'kind':'ongoing','id':item['id'],'revision':0,'version':status['version'],'value':{'quantity':10,'endDate':'2026-10-28'}}
+    item=status['ongoing'][0];event={'kind':'ongoing','plan_id':item['id'],'revision':0,'version':status['version'],'value':{'quantity':10,'endDate':'2026-10-28'}}
     store.save_dataset(admin,'changed.xlsx',{**fixture(),'changed':True})
     with pytest.raises(ValueError,match='changed'):save(store,admin,event)
     store.update_permissions(admin,'viewer_user',{'edit_upcoming':True})
@@ -127,3 +127,31 @@ def test_production_segments_resolve_material_and_saved_upcoming_segment(account
     explicit=save(store,admin,{**event,'value':{**value,'product':'Manual product','batch':'NEXTB','segment':'Other'}})
     assert next(i for i in explicit['upcoming'] if i['row'][2]=='NEXTB')['segments']==['Other']
     with pytest.raises(ValueError,match='segment'):save(store,admin,{**event,'value':{**value,'segment':'Unknown'}})
+
+
+def test_rpc_request_id_is_not_used_as_plan_id_for_create_or_edit(accounts):
+    import uuid
+    store,admin,viewer=accounts;store.save_dataset(admin,'master.xlsx',fixture());status=read(store,admin)
+    event={'action':'production_save','id':str(uuid.uuid4()),'kind':'upcoming','version':status['version'],'revision':0,'value':{'materialCode':'A','product':'A','description':'Size A','batch':'NEXT','quantity':50,'startDate':'2026-11-01','endDate':'2026-11-10'}}
+    created=handle_request(store,admin,event)['upcoming'][0]
+    assert len(created['id'])==32 and created['id']!=event['id']
+    updated=handle_request(store,admin,{**event,'id':str(uuid.uuid4()),'plan_id':created['id'],'revision':created['revision'],'value':{**event['value'],'quantity':75}})['upcoming'][0]
+    assert updated['id']==created['id'] and updated['row'][3]==75 and updated['revision']==2
+
+
+def test_matching_material_and_batch_archives_upcoming_but_not_partial_matches(accounts):
+    store,admin,viewer=accounts;d=fixture();store.save_dataset(admin,'master.xlsx',d);status=read(store,admin)
+    base={'kind':'upcoming','version':status['version'],'revision':0,'value':{'materialCode':'A','product':'A','description':'Size A','batch':'NEXT','quantity':50,'startDate':'2026-11-01','endDate':'2026-11-10'}}
+    save(store,admin,base)
+    # Same batch with another material is still upcoming.
+    save(store,admin,{**base,'value':{**base['value'],'materialCode':'B','batch':'OPEN'}})
+    # Exact material and batch match existing order A/OPEN, ignoring whitespace/case.
+    result=save(store,admin,{**base,'value':{**base['value'],'batch':' open '}})
+    assert len(result['upcoming'])==2
+    assert {(i['materialCode'],i['row'][2]) for i in result['upcoming']}=={('A','NEXT'),('B','OPEN')}
+    with store.transaction() as db:
+        assert store.run(db,"SELECT COUNT(*) AS n FROM production_shared WHERE kind='upcoming_started'").fetchone()['n']==1
+    # Archived plans remain removed even when a later order dump is narrower.
+    orders=d['tables'][0];bi=orders['headers'].index('Batch');orders['rows']=[r for r in orders['rows'] if r[bi]!='OPEN']
+    store.save_dataset(admin,'next.xlsx',d)
+    assert len(read(store,viewer)['upcoming'])==2

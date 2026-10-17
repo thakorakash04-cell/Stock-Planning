@@ -237,3 +237,14 @@ unknown stock and mismatched units never produce a green result. The check uses
 one plan against the uploaded snapshot; it does not reserve stock across plans
 or recursively explode SFG subassemblies. Plan revision, workbook version and
 Production access are checked again before the result is returned.
+
+Production save and availability requests use a separate `plan_id`; the RPC
+request `id` is reserved for request/response correlation. New plan IDs are
+created by the server. This prevents Invalid plan ID errors and edit/check
+requests waiting for a response under the wrong ID.
+
+Upcoming plans are automatically archived when both their resolved material code
+and batch match Production Order Details. Matching ignores surrounding spaces
+and letter case, never matches on material or batch alone, retains the saved
+history/audit trail, and keeps archived plans out of future upcoming lists even
+when a later SAP dump omits older orders.

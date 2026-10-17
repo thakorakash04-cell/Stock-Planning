@@ -34,7 +34,7 @@ async function change(key,value){await act(async()=>{const el=document.querySele
  assert.equal(document.querySelector('[aria-label="description"]').value,'Product A');
  for(const [k,v] of Object.entries({batch:'NEXT',quantity:'100',startDate:'2026-11-01',endDate:'2026-11-10'}))await change(k,v);
  await act(async()=>{document.querySelector('form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick()});
- const saved=calls.find(c=>c.action==='production_save');assert.equal(saved.payload.value.quantity,100);assert.equal(saved.payload.version,'v1');assert.equal(saved.payload.kind,'upcoming');
+ const saved=calls.find(c=>c.action==='production_save');assert.equal(saved.payload.value.quantity,100);assert.equal(saved.payload.version,'v1');assert.equal(saved.payload.kind,'upcoming');assert.ok(!Object.hasOwn(saved.payload,'id'),'UI must not replace the RPC request ID');assert.equal(calls.find(c=>c.action==='production_availability').payload.plan_id,'plan1');
  await act(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Edit order')).click();await tick()});
  assert.equal(document.querySelectorAll('.production-form input').length,2,'Only expected quantity and end date may be edited');
  await act(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent==='Cancel').click();await tick()});

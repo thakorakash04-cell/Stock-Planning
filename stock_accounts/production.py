@@ -4,7 +4,7 @@ from datetime import date,datetime,timezone
 from statistics import median
 from .access import require_menu
 
-REVISION=4
+REVISION=5
 QC_HEADERS=['Material Code','Description','Batch','Order Quantity','Confirmed Quantity','Latest 101 Date','Order Number','Material Type']
 ONGOING_HEADERS=['Order Number','Material Type','Material Code','Description','Batch','Order Quantity','Basic Start Date','Expected End Date','Expected FG Quantity','Estimate Basis','Last Saved By','Last Saved At']
 PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At','Segment']
@@ -134,15 +134,28 @@ def read(store,actor):
         old=overrides.get(item['id'])
         if old:
             value=json.loads(old['payload']);item['row'][7:9]=[value['endDate'],value['quantity']];item['row'][9]='Saved planning override';item['row'][10:]=[old['updated_by'],timestamp(old['updated_at'])];item['revision']=old['revision']
+    from .production_materials import records as source_records
+    production_pairs={(ident(r.get('Material Number')).casefold(),ident(r.get('Batch')).casefold()) for r in source_records(current['data'],'Production Order Details') if ident(r.get('Material Number')) and ident(r.get('Batch'))}
     result['upcoming']=[{'id':r['id'],'revision':r['revision'],'row':[*(json.loads(r['payload'])[k] for k in ('product','description','batch','quantity','startDate','endDate')),r['updated_by'],timestamp(r['updated_at'])]} for r in saved if r['kind']=='upcoming' and not str(json.loads(r['payload']).get('batch','')).strip()[:1].isdigit()]
     for item in result['upcoming']:
         saved_row=next(r for r in saved if r['id']==item['id'] and r['kind']=='upcoming')
         payload=json.loads(saved_row['payload']);chosen=payload.get('segment','')
         material=resolve(current['data'],payload)
-        item['materialCode']=material['code'] if material else None
+        item['materialCode']=material['code'] if material else ident(payload.get('materialCode')) or None
         inferred=mapping.get(str(item['row'][0]).strip(),set()) or product_segments.get(str(item['row'][0]).strip().casefold(),set())
         item['segments']=[chosen] if chosen else sorted(inferred)
         item['row'].append(', '.join(item['segments']) or 'Unassigned')
+    matched=[item for item in result['upcoming'] if item.get('materialCode') and (ident(item['materialCode']).casefold(),ident(item['row'][2]).casefold()) in production_pairs]
+    if matched:
+        # Archive automatically once an order exists; retain history and avoid
+        # resurrecting old plans when a later SAP dump omits older orders.
+        with store.transaction() as db:
+            store.require(db,actor)
+            for item in matched:
+                cursor=store.run(db,"UPDATE production_shared SET kind='upcoming_started' WHERE kind='upcoming' AND id=? AND revision=?",(item['id'],item['revision']))
+                if cursor.rowcount:store._log(db,actor.username,'production_plan_matched','Upcoming plan matched a production order',actor.session_id)
+    matched_ids={item['id'] for item in matched}
+    result['upcoming']=[item for item in result['upcoming'] if item['id'] not in matched_ids]
     return result
 
 
@@ -154,7 +167,7 @@ def save(store,actor,event):
     if not current or event.get('version')!=current['version']:raise ValueError('The workbook changed. Refresh Production before saving.')
     value=event.get('value',{});qty=value.get('quantity');end=day(value.get('endDate'))
     if not number(qty) or qty<0 or qty>1e12 or not end:raise ValueError('Enter a valid non-negative quantity and end date.')
-    key=event.get('id');expected=event.get('revision',0)
+    key=event.get('plan_id');expected=event.get('revision',0)
     if type(expected) is not int or expected<0:raise ValueError('Invalid saved revision.')
     if kind=='ongoing':
         item=next((r for r in build(current)['ongoing'] if r['id']==key),None)
@@ -182,7 +195,7 @@ def save(store,actor,event):
         if not isinstance(chosen,str) or chosen and chosen not in valid_segments:raise ValueError('Choose a segment from the current workbook.')
         payload['segment']=chosen
         payload.update(quantity=qty,startDate=start.isoformat(),endDate=end.isoformat())
-        if key is None:key=uuid.uuid4().hex
+        if key in (None,'') and expected==0:key=uuid.uuid4().hex
         if not isinstance(key,str) or not re.fullmatch('[a-f0-9]{32}',key):raise ValueError('Invalid plan ID.')
     with store.transaction() as db:
         store.require(db,actor,permission=permission);store.require(db,actor,permission='menu_3');schema(store,db)
@@ -217,7 +230,7 @@ def check_availability(store,actor,event):
     from .production_materials import availability
     report=read(store,actor)
     if event.get('version')!=report['version']:raise ValueError('The workbook changed. Refresh Production.')
-    item=next((r for r in report['upcoming'] if r['id']==event.get('id')),None)
+    item=next((r for r in report['upcoming'] if r['id']==event.get('plan_id')),None)
     if not item or item['revision']!=event.get('revision'):raise ValueError('This plan changed. Refresh Production.')
     if not item.get('materialCode'):raise ValueError('Edit this legacy plan and select its FG/SFG material first.')
     current=store.get_dataset(actor)
