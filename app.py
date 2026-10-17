@@ -17,17 +17,19 @@ from tables import table_controls
 # Streamlit may retain helper modules across a source update. Reload only an
 # older analysis revision, in dependency order; never reload account storage.
 import importlib
+from stock_accounts import lead_time as _lead_time
+if getattr(_lead_time,'REVISION',0)!=2:importlib.reload(_lead_time)
 import grounded_ai as _grounded_ai
 from stock_accounts import insights as _insights, assistant_insights as _assistant, workspace_insights as _workspace
 for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
 # Refresh the dispatcher when an already-running process gains planning RPCs.
-if getattr(_workspace,'PLANNING_REVISION',0)!=8:
+if getattr(_workspace,'PLANNING_REVISION',0)!=9:
     importlib.reload(_workspace)
 from stock_accounts import planning as _planning, matched_export as _matched_export
 for _module in (_planning,_matched_export):
-    if getattr(_module,'TABLE_EXPORT_REVISION',0)!=2:
+    if getattr(_module,'TABLE_EXPORT_REVISION',0)!=(2 if _module is _matched_export else 3):
         importlib.reload(_module)
 from stock_accounts import production as _production
 if getattr(_production,'REVISION',0)!=6:importlib.reload(_production)

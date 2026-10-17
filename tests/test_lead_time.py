@@ -23,16 +23,16 @@ def test_order_date_cumulative_fg_and_component_cover_once():
  d=dataset();t=purchasing(d)
  # Duplicate BOM rows are distinct source rows, consistent with source total 60.
  # November demand20 consumes current RM20; December demand40 makes shortage.
- assert t['rows'][0][-1]=='2026-11-16'
+ assert t['rows'][0][-2]=='2026-11-16'
  assert len(t['rows'][0])==len(t['headers'])
  d['sheets'][1]['rows'][0][7]=0
- assert purchasing(d)['rows'][0][-1] is None
+ assert purchasing(d)['rows'][0][-2] is None
 
 def test_missing_history_and_mismatched_bom_never_invent_dates():
  d=dataset();d['tables'][2]['rows']=[]
- assert purchasing(d)['rows'][0][-1]=='Missing procurement history'
+ assert purchasing(d)['rows'][0][-2]=='Missing procurement history'
  d=dataset();d['tables'][0]['rows']=[]
- assert purchasing(d)['rows'][0][-1]=='Missing dated forecast / BOM link'
+ assert purchasing(d)['rows'][0][-2]=='Missing dated forecast / BOM link'
 
 def test_lead_menu_independent_of_gemini_right():
  assert len(MENU_LABELS)==10
@@ -43,15 +43,15 @@ def test_lead_menu_independent_of_gemini_right():
 
 def test_standard_bom_demand_is_not_rescaled_to_saved_required():
  d=dataset();d['sheets'][1]['rows'][0][4]=6000
- assert purchasing(d)['rows'][0][-1]=='2026-11-16'
+ assert purchasing(d)['rows'][0][-2]=='2026-11-16'
  d['sheets'][1]['rows'][0][5]=100
- assert purchasing(d)['rows'][0][-1]=='No matching dated forecast shortage'
+ assert purchasing(d)['rows'][0][-2]=='No matching dated forecast shortage'
 
 def test_transfers_carry_to_later_months_and_fg_stock_not_repeated():
  d=dataset();d['sheets'][0]['rows'][0][5]=12
  # Transfers 12 + FG stock5 cover all November and7 December; remaining3FG*4RM=12.
  d['sheets'][1]['rows'][0][5]=0
- assert purchasing(d)['rows'][0][-1]=='2026-11-16'
+ assert purchasing(d)['rows'][0][-2]=='2026-11-16'
 
 def test_enriched_download_keeps_suggested_date_and_validates_rows(accounts):
  from stock_accounts.workspace_insights import handle_request
@@ -63,16 +63,37 @@ def test_enriched_download_keeps_suggested_date_and_validates_rows(accounts):
  payload={'action':'planning_table_export','source':'forecast_purchasing','version':current['version'],'headers':result['headers'],'rows':result['rows']}
  export=handle_request(store,viewer,payload)
  rows=list(load_workbook(io.BytesIO(base64.b64decode(export['content']))).active.values)
- assert rows[0][-1]=='Suggested order by date'
- assert rows[1][-1]=='2026-11-16'
+ assert rows[0][-2]=='Suggested order by date'
+ assert rows[0][-1]=='Average Lead Time (Days)'
+ assert rows[1][-2]=='2026-11-16'
+ assert rows[1][-1]==10
 
 def test_standard_bom_expands_sfg_using_base_quantity():
  d=dataset()
  d['tables'][0]=table('BOM',[{'Material':'FG','Component':'SFG','Component(text)':'Semi','Component quantity':2,'Base quantity':1,'Material Type':'ZSFG','Source.Name':'Care.xlsx'}, {'Material':'SFG','Component':'RM','Component(text)':'Raw','Component quantity':4,'Base quantity':2,'Material Type':'ZRAW','Source.Name':'Care.xlsx'}])
  # RM rate4 per FG; first November5FG consumes20RM exactly, December shortages.
- assert purchasing(d)['rows'][0][-1]=='2026-11-16'
+ assert purchasing(d)['rows'][0][-2]=='2026-11-16'
 
 def test_ambiguous_alternative_invalidates_descendant_components():
  d=dataset()
  d['tables'][0]=table('BOM',[{'Material':'FG','Component':'SFG','Component(text)':'Semi','Component quantity':2,'Base quantity':1,'Alternative BOM':1}, {'Material':'FG','Component':'SFG','Component(text)':'Semi','Component quantity':3,'Base quantity':1,'Alternative BOM':2}, {'Material':'SFG','Component':'RM','Component(text)':'Raw','Component quantity':4,'Base quantity':2,'Alternative BOM':1}])
- assert purchasing(d)['rows'][0][-1]=='Check BOM consumption'
+ assert purchasing(d)['rows'][0][-2]=='Check BOM consumption'
+
+def test_average_column_keeps_missing_blank_and_zero_valid():
+ from stock_accounts.lead_time import with_average,AVERAGE_HEADER
+ t={'headers':['Component','Need'],'rows':[['RM',1],['UNKNOWN',2],['ZERO',3]]}
+ result=with_average(t,{}, {'RM':[10.5,None,None],'ZERO':[0,None,None]})
+ assert result['headers'][-1]==AVERAGE_HEADER
+ assert result['rows']==[['RM',1,10.5],['UNKNOWN',2,None],['ZERO',3,0]]
+ assert t['rows']==[['RM',1],['UNKNOWN',2],['ZERO',3]]
+
+def test_calculated_ps_result_includes_po_to_inward_only(accounts):
+ from test_planning import dataset as planning_dataset
+ from stock_accounts.planning import handle_planning
+ store,admin,viewer=accounts;d=planning_dataset()
+ d['tables'] += [table('Material Document List',[{'Material':'X','Batch':'001','Posting Date':'2026-01-11','Movement Type':101,'Purchase Order':'123'}]),table('Order List',[{'Material':'X','Purchasing Document':'123','Document Date':'2026-01-01'}])]
+ store.save_dataset(admin,'master.xlsx',d);version=store.get_dataset(admin)['version']
+ result=handle_planning(store,viewer,{'action':'planning_calculate','version':version,'entries':[{'code':'A','quantity':10}]})
+ assert result['headers'][-1]=='Average Lead Time (Days)'
+ assert result['rows'][0]==['X','Shared','ZRAW',25,8,3,14,10]
+ assert result['rows'][1][-1] is None

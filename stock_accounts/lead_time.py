@@ -133,4 +133,15 @@ def purchasing(dataset,averages=None):
                     due=(shortage-timedelta(days=math.ceil(avg[0]+max(avg[1],avg[2])))).isoformat()
                 else:due='No matching dated forecast shortage'
         out.append(r+[due])
-    return {**source,'headers':source['headers']+['Suggested order by date'],'rows':out}
+    return with_average({**source,'headers':source['headers']+['Suggested order by date'],'rows':out},dataset,averages)
+
+AVERAGE_HEADER='Average Lead Time (Days)'
+
+def with_average(table,dataset,averages=None):
+    """Append numeric PO-to-inward batch means; unavailable history stays null."""
+    if averages is None:_,averages=build(dataset)
+    if AVERAGE_HEADER in table['headers']:return table
+    return {**table,'headers':table['headers']+[AVERAGE_HEADER],
+            'rows':[list(r)+[averages.get(key(r[0]),[None])[0]] for r in table['rows']]}
+
+REVISION=2

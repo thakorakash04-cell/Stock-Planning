@@ -92,7 +92,8 @@ def handle_planning(store,actor,event):
     if event.get('action')=='planning_status':
         return {'version':version,'options':options(current['data'])}
     if event.get('version')!=version:raise ValueError('The workbook changed. Reload planning materials and enter your quantities again.')
-    result=calculate(current['data'],event.get('entries'))
+    from .lead_time import with_average
+    result=with_average(calculate(current['data'],event.get('entries')),current['data'])
     store.record_access(actor,'Order requirements planning')
     plan_id=secrets.token_urlsafe(18)
     st.session_state['_order_plan_export']={'owner':(actor.username,actor.session_id),'version':version,'plan_id':plan_id,'table':result}
@@ -113,6 +114,9 @@ def export_planning_table(store,actor,event):
         if source=='forecast_purchasing':
             from .lead_time import purchasing
             table=purchasing(current['data'])
+        else:
+            from .lead_time import with_average
+            table=with_average(table,current['data'])
     elif source=='order_requirements_plan':
         saved=st.session_state.get('_order_plan_export',{})
         if saved.get('owner')!=(actor.username,actor.session_id) or saved.get('version')!=current['version'] or not saved.get('plan_id') or saved.get('plan_id')!=event.get('plan_id'):
@@ -122,4 +126,4 @@ def export_planning_table(store,actor,event):
     label='Forecast purchasing' if source=='forecast_purchasing' else 'Order requirements'
     return export_table(store,actor,event,current,table,label,label.replace(' ','_')+'.xlsx')
 
-TABLE_EXPORT_REVISION=2
+TABLE_EXPORT_REVISION=3

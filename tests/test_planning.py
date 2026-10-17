@@ -53,7 +53,7 @@ def test_plan_requests_are_authorized_versioned_and_leave_shared_data_unchanged(
     original=store.get_dataset(viewer)
     status=handle_request(store,viewer,{'action':'planning_status'})
     event={'action':'planning_calculate','version':status['version'],'entries':[{'code':'A','quantity':4}]}
-    assert handle_request(store,viewer,event)['rows'][0][-1]==-1
+    assert handle_request(store,viewer,event)['rows'][0][6]==-1
     assert store.get_dataset(viewer)==original
     with pytest.raises(ValueError,match='changed'):handle_request(store,viewer,{**event,'version':'old'})
     store.update_viewer(admin,'viewer_user',active=False)

@@ -14,10 +14,10 @@ def ui_payload(current,identity=None):
     from .access import allowed
     if current:
         dataset=current["data"]
-        from .lead_time import build,purchasing
+        from .lead_time import build,purchasing,with_average
         lead,averages=build(dataset)
         purchase=purchasing(dataset,averages)
-        dataset={**dataset,'sheets':[purchase if i==5 and purchase else sheet for i,sheet in enumerate(dataset['sheets'])]}
+        dataset={**dataset,'sheets':[purchase if i==5 and purchase else with_average(sheet,dataset,averages) if i==6 else sheet for i,sheet in enumerate(dataset['sheets'])]}
         if identity and not allowed(identity,9):lead={**lead,'rows':[]}
         if identity:
             dataset={**dataset,'sheets':[{**sheet,'rows':sheet['rows'] if allowed(identity,i) else []} for i,sheet in enumerate(dataset['sheets'])]}
@@ -34,7 +34,7 @@ def workspace_payload(store,actor):
         row=store.run(db,"SELECT version,updated_at FROM datasets WHERE id='current'").fetchone()
         revision=(row['version'],row['updated_at']) if row else None
     identity=store.identity(actor)
-    key=(actor.username,actor.session_id,revision,str(identity['permissions']),8)
+    key=(actor.username,actor.session_id,revision,str(identity['permissions']),9)
     cached=st.session_state.get('_workspace_payload')
     if not cached or cached[0]!=key:
         cached=(key,ui_payload(store.get_dataset(actor),identity))
