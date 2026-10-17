@@ -24,7 +24,7 @@ export function startBridge(onReady:(args:Args)=>void){
   if(event.source!==window.parent||event.data?.type!=='streamlit:render')return;
   parentOrigin=event.origin;
   const args=event.data.args as Args;if(!args?.user)return;
-  const changed=Boolean(args.data)&&(!state?.data||args.version!==state.version);
+  const changed=Boolean(args.data)&&(!state?.data||args.version!==state.version||args.data?.planningRevision!==state?.data?.planningRevision);
   const userChanged=Boolean(state?.user)&&state?.user!==args.user;
   if(userChanged){dirtyPreferences.clear();if(preferenceTimer)clearTimeout(preferenceTimer);preferenceTimer=undefined}
   const oldPreferences=JSON.stringify(state?.preferences||{});

@@ -63,7 +63,31 @@ def build(dataset):
     averages={k:[sum(sum(x)/len(x) for x in v.values())/len(v) if v else None for v in groups] for k,groups in observations.items()}
     return {'headers':HEADERS,'rows':rows},averages
 
-def purchasing(dataset,averages=None):
+def production_supply(dataset,current=None,overrides=()):
+    """Reuse the Production windows; QC stock is already in planning stock."""
+    from .production import build as production_build
+    import json,time
+    current=current or {'data':dataset,'version':'calculation','updated_at':time.time()}
+    try:report=production_build(current)
+    except ValueError:return {},set(),None
+    qc_pairs={(key(r[0]),key(r[2])) for r in report['qc']['rows']}
+    saved={r['id']:json.loads(r['payload']) for r in overrides if r['kind']=='ongoing'}
+    events=defaultdict(list);seen=set();ref=day(report['referenceDate'])
+    for item in report['ongoing']:
+        r=item['row'];pair=(key(r[2]),key(r[4]))
+        if pair in qc_pairs or pair in seen:continue
+        seen.add(pair);override=saved.get(item['id'])
+        quantity=num(override['quantity']) if override else num(r[8])
+        if quantity is None:quantity=num(r[5])  # SAP order quantity when no yield estimate exists.
+        available=day(override['endDate'] if override else r[7])
+        if quantity is not None and quantity>0 and available:
+            events[pair[0]].append((max(available,ref),quantity))
+    # Confirmed QC batches are already included in Unrestricted + In Quality Insp.
+    # They are available at the snapshot for planning, without a QC duration lag.
+    # Excluding these pairs above prevents counting an order in both windows.
+    return events,qc_pairs,ref
+
+def purchasing(dataset,averages=None,current=None,overrides=()):
     source=next((s for s in dataset.get('sheets',[]) if s['name']=='Forecast Need to Order List'),None)
     if not source:return None
     if averages is None:_,averages=build(dataset)
@@ -76,6 +100,27 @@ def purchasing(dataset,averages=None):
             month=list(calendar.month_name).index(str(r[3])) if not str(r[3]).isdigit() else int(r[3]);d=date(int(r[2]),month,1)
         except (ValueError,TypeError):continue
         products[key(r[0])].append((d,num(r[4]) or 0,num(r[6]),num(r[5]) or 0))
+    supplies,qc_pairs,reference=production_supply(dataset,current,overrides)
+    balances={}
+    for r in records(dataset,'Stock Data'):
+        code=key(r.get('Material'));value=num(r.get('Current Stock'))
+        if value is None:
+            unrestricted=num(r.get('Unrestricted'));quality=num(r.get('In Quality Insp.'))
+            value=unrestricted+quality if unrestricted is not None and quality is not None else None
+        if value is not None:balances[code]=balances.get(code,0)+value
+    # Forecast worksheet stock is authoritative for each forecasted product.
+    tasks=[]
+    for product,months in products.items():
+        balances[product]=next((v for _,_,v,_ in months if v is not None),0)+sum(t for _,_,_,t in months)
+        tasks.extend((max(d,reference) if reference else d,product,qty) for d,qty,_,_ in months if qty>0)
+    available_events={code:sorted(values) for code,values in supplies.items()}
+    def uncovered(code,quantity,needed):
+        pending=available_events.setdefault(code,[])
+        while pending and pending[0][0]<=needed:
+            _,amount=pending.pop(0);balances[code]=balances.get(code,0)+amount
+        taken=min(max(balances.get(code,0),0),quantity)
+        balances[code]=balances.get(code,0)-taken
+        return quantity-taken
     demand=defaultdict(lambda:defaultdict(float))
     boms=defaultdict(list)
     for b in records(dataset,'BOM'):boms[key(b.get('Material'))].append(b)
@@ -87,31 +132,39 @@ def purchasing(dataset,averages=None):
         for b in boms[parent]:
             component=key(b.get('Component'));invalid.add(component)
             if component in boms:invalidate(component,visited)
-    for product,months in products.items():
-        months.sort();stock=next((s for _,_,s,_ in months if s is not None),0)+sum(t for _,_,_,t in months)
-        for d,qty,_,_ in months:
-            used=min(max(stock,0),qty);stock-=used;qty-=used
-            if qty<=0:continue
-            def consume(parent,quantity,path):
-                if parent in path:
-                    invalidate(parent);return
-                alternatives={str(b.get('Alternative BOM') or '') for b in boms[parent]}
-                if len(alternatives)>1:
-                    invalidate(parent);return
-                seen=set()
-                for b in boms[parent]:
-                    component=key(b.get('Component'));rate=num(b.get('Component quantity'))
-                    base=num(b.get('Base quantity',1))
-                    if rate is None or rate<0 or base is None or base<=0:
-                        invalid.add(component);continue
-                    if b.get('Item Number') is not None:
-                        fingerprint=tuple(str(b.get(h)) for h in ('Bill of material','Alternative BOM','Item Number','Plant','Component','Component quantity','Base quantity'))
-                        if fingerprint in seen:continue
-                        seen.add(fingerprint)
-                    required=rate if str(b.get('Fixed quantity') or '').strip().upper()=='X' else quantity/base*rate
-                    demand[component][d]+=required
-                    if component in boms:consume(component,required,path|{parent})
-            consume(product,qty,set())
+    for d,product,requested in sorted(tasks):
+        qty=uncovered(product,requested,d)
+        if qty<=0:continue
+        def consume(parent,quantity,path):
+            if parent in path:
+                invalidate(parent);return
+            alternatives={str(b.get('Alternative BOM') or '') for b in boms[parent]}
+            if len(alternatives)>1:
+                invalidate(parent);return
+            seen=set()
+            for b in boms[parent]:
+                component=key(b.get('Component'));rate=num(b.get('Component quantity'))
+                base=num(b.get('Base quantity',1))
+                if rate is None or rate<0 or base is None or base<=0:
+                    invalid.add(component);continue
+                if b.get('Item Number') is not None:
+                    fingerprint=tuple(str(b.get(h)) for h in ('Bill of material','Alternative BOM','Item Number','Plant','Component','Component quantity','Base quantity'))
+                    if fingerprint in seen:continue
+                    seen.add(fingerprint)
+                required=rate if str(b.get('Fixed quantity') or '').strip().upper()=='X' else quantity/base*rate
+                demand[component][d]+=required
+                if component in boms:
+                    remaining=uncovered(component,required,d)
+                    if remaining>0:consume(component,remaining,path|{parent})
+        consume(product,qty,set())
+    linked=set()
+    def link(parent,visited):
+        if parent in visited:return
+        visited.add(parent)
+        for b in boms[parent]:
+            component=key(b.get('Component'));linked.add(component)
+            if component in boms:link(component,visited)
+    for product in products:link(product,set())
     out=[]
     for row in source['rows']:
         r=list(row);code=key(r[0]);need=num(r[7]) if len(r)>7 else None;due=None
@@ -119,18 +172,20 @@ def purchasing(dataset,averages=None):
             avg=averages.get(code,[None,None,None]);stock=num(r[5]);onorder=num(r[6]);coverage=None if stock is None or onorder is None else stock+onorder
             if code in invalid:due='Check BOM consumption'
             elif coverage is None:due='Missing stock / on-order'
-            elif sum(demand[code].values())<=0:due='Missing dated forecast / BOM link'
+            elif sum(demand[code].values())<=0:due='Covered by FG stock / production' if code in linked else 'Missing dated forecast / BOM link'
             elif avg[0] is None:due='Missing procurement history'
-            elif avg[1] is None or avg[2] is None:due='Missing QC / use history'
             else:
                 shortage=None
+                scheduled=sorted(supplies.get(code,[]))
                 for d,qty in sorted(demand[code].items()):
+                    while scheduled and scheduled[0][0]<=d:
+                        _,amount=scheduled.pop(0);coverage+=amount
                     # Standard BOM consumption determines the monthly shortage directly.
                     coverage-=qty
                     if coverage<0:shortage=d;break
                 if shortage:
-                    # Use lag already includes QC residence: do not add QC twice.
-                    due=(shortage-timedelta(days=math.ceil(avg[0]+max(avg[1],avg[2])))).isoformat()
+                    # Only the historical PO-generation-to-inward interval offsets the need date.
+                    due=(shortage-timedelta(days=math.ceil(avg[0]))).isoformat()
                 else:due='No matching dated forecast shortage'
         out.append(r+[due])
     return with_average({**source,'headers':source['headers']+['Suggested order by date'],'rows':out},dataset,averages)
@@ -144,4 +199,4 @@ def with_average(table,dataset,averages=None):
     return {**table,'headers':table['headers']+[AVERAGE_HEADER],
             'rows':[list(r)+[averages.get(key(r[0]),[None])[0]] for r in table['rows']]}
 
-REVISION=2
+REVISION=3

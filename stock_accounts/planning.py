@@ -113,7 +113,8 @@ def export_planning_table(store,actor,event):
         if table is None:raise ValueError('This purchasing worksheet is unavailable.')
         if source=='forecast_purchasing':
             from .lead_time import purchasing
-            table=purchasing(current['data'])
+            from .production import shared
+            table=purchasing(current['data'],current=current,overrides=shared(store,actor))
         else:
             from .lead_time import with_average
             table=with_average(table,current['data'])
@@ -126,4 +127,4 @@ def export_planning_table(store,actor,event):
     label='Forecast purchasing' if source=='forecast_purchasing' else 'Order requirements'
     return export_table(store,actor,event,current,table,label,label.replace(' ','_')+'.xlsx')
 
-TABLE_EXPORT_REVISION=3
+TABLE_EXPORT_REVISION=4

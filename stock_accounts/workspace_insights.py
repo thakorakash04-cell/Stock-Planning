@@ -10,19 +10,19 @@ from workbook import read_upload,SPECS,segment_map
 
 _component=components.declare_component("stock_planning_web_ui",path=str(Path(__file__).resolve().parents[1]/"frontend_dist"))
 
-def ui_payload(current,identity=None):
+def ui_payload(current,identity=None,overrides=()):
     from .access import allowed
     if current:
         dataset=current["data"]
         from .lead_time import build,purchasing,with_average
         lead,averages=build(dataset)
-        purchase=purchasing(dataset,averages)
+        purchase=purchasing(dataset,averages,current,overrides)
         dataset={**dataset,'sheets':[purchase if i==5 and purchase else with_average(sheet,dataset,averages) if i==6 else sheet for i,sheet in enumerate(dataset['sheets'])]}
         if identity and not allowed(identity,9):lead={**lead,'rows':[]}
         if identity:
             dataset={**dataset,'sheets':[{**sheet,'rows':sheet['rows'] if allowed(identity,i) else []} for i,sheet in enumerate(dataset['sheets'])]}
         mapping=segment_map(dataset.get("tables",[]))
-        return {"accessibleTabs":[i for i in range(10) if not identity or allowed(identity,i)],"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"leadTime":lead,"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
+        return {"accessibleTabs":[i for i in range(10) if not identity or allowed(identity,i)],"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"planningRevision":str([(r["id"],r["revision"],r["updated_at"]) for r in overrides if r["kind"]=="ongoing" ]),"leadTime":lead,"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
     return {"accessibleTabs":[i for i in range(10) if not identity or allowed(identity,i)],"filename":"No workbook uploaded yet","updatedAt":None,"asOf":"—","sheets":[{"name":s[0],"headers":["Material","Description"],"rows":[]} for s in SPECS],"segmentMap":{}},[],"empty"
 
 def workspace_payload(store,actor):
@@ -34,10 +34,13 @@ def workspace_payload(store,actor):
         row=store.run(db,"SELECT version,updated_at FROM datasets WHERE id='current'").fetchone()
         revision=(row['version'],row['updated_at']) if row else None
     identity=store.identity(actor)
-    key=(actor.username,actor.session_id,revision,str(identity['permissions']),9)
+    from .production import shared
+    overrides=shared(store,actor)
+    supply_revision=tuple((r['id'],r['revision'],r['updated_at']) for r in overrides if r['kind']=='ongoing')
+    key=(actor.username,actor.session_id,revision,str(identity['permissions']),10,supply_revision)
     cached=st.session_state.get('_workspace_payload')
     if not cached or cached[0]!=key:
-        cached=(key,ui_payload(store.get_dataset(actor),identity))
+        cached=(key,ui_payload(store.get_dataset(actor),identity,overrides))
         st.session_state['_workspace_payload']=cached
     return cached[1]
 
@@ -185,4 +188,4 @@ def render_exact_workspace(store,actor,identity):
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
 
-PLANNING_REVISION=9
+PLANNING_REVISION=10
