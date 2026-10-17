@@ -10,25 +10,32 @@ def export_matched(store,actor,event):
         raise ValueError('The workbook changed. Reopen the selected value before downloading.')
     if event.get('scope')!='related' or event.get('exportTables'):
         raise ValueError('Only the selected matched-records table can be downloaded.')
-    data=current['data'];tab=event.get('tab');row=event.get('row');col=event.get('col')
-    sheets=data.get('sheets',[])
-    if type(tab) is not int or not 0<=tab<len(sheets) or not isinstance(row,list):
-        raise ValueError('Select a saved worksheet value before downloading matched records.')
-    valid_rows=sheets[tab]['rows']
-    if tab==4 and row not in valid_rows:
-        # Match the browser's product-total rows, including blank FG stock.
-        groups={}
-        for r in valid_rows:
-            if not r[0]:continue
-            g=groups.setdefault(str(r[0]),[r[0],r[1],0,0,None])
-            for target,source in [(2,4),(3,5)]:
-                if isinstance(r[source],(int,float)):g[target]+=r[source]
-            if g[4] is None and isinstance(r[6],(int,float)):g[4]=r[6]
-        valid_rows=[g+[g[2]-g[3]-(g[4] or 0)] for g in groups.values()]
-    if row not in valid_rows:raise ValueError('Select a saved worksheet value before downloading matched records.')
-    if type(col) is not int or not 0<=col<len(sheets[tab]['headers']):
-        raise ValueError('Select a table value before downloading matched records.')
-    code=row[3 if tab in (2,3) else 0]
+    data=current['data']
+    if event.get('selection') is not None:
+        from .production import selection
+        code,headers=selection(store,actor,event)
+        col=event.get('col')
+        if type(col) is not int or not 0<=col<len(headers):raise ValueError('Select a production table value.')
+    else:
+        data=current['data'];tab=event.get('tab');row=event.get('row');col=event.get('col')
+        sheets=data.get('sheets',[])
+        if type(tab) is not int or not 0<=tab<len(sheets) or not isinstance(row,list):
+            raise ValueError('Select a saved worksheet value before downloading matched records.')
+        valid_rows=sheets[tab]['rows']
+        if tab==4 and row not in valid_rows:
+            # Match the browser's product-total rows, including blank FG stock.
+            groups={}
+            for r in valid_rows:
+                if not r[0]:continue
+                g=groups.setdefault(str(r[0]),[r[0],r[1],0,0,None])
+                for target,source in [(2,4),(3,5)]:
+                    if isinstance(r[source],(int,float)):g[target]+=r[source]
+                if g[4] is None and isinstance(r[6],(int,float)):g[4]=r[6]
+            valid_rows=[g+[g[2]-g[3]-(g[4] or 0)] for g in groups.values()]
+        if row not in valid_rows:raise ValueError('Select a saved worksheet value before downloading matched records.')
+        if type(col) is not int or not 0<=col<len(sheets[tab]['headers']):
+            raise ValueError('Select a table value before downloading matched records.')
+        code=row[3 if tab in (2,3) else 0]
     table=next((t for t in related_tables(data.get('tables',[]),code) if t['name']==event.get('table')),None)
     if table is None:raise ValueError('The selected source table is unavailable.')
     if table['name']=='Calendar':
@@ -69,4 +76,4 @@ def export_table(store,actor,event,current,table,resource,filename):
     return {'content':base64.b64encode(output.getvalue()).decode(),'filename':filename,
             'mime':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
 
-TABLE_EXPORT_REVISION=1
+TABLE_EXPORT_REVISION=2

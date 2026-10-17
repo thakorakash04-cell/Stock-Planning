@@ -41,6 +41,9 @@ def handle_request(store,actor,event):
     identity=store.identity(actor)
     action=event.get("action")
     from .access import require_menu
+    if action=='production_availability':
+        from .production import check_availability
+        return check_availability(store,actor,event)
     if action in ('production_status','production_save'):
         from .production import read,save
         return read(store,actor) if action=='production_status' else save(store,actor,event)
@@ -167,4 +170,4 @@ def render_exact_workspace(store,actor,identity):
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
 
-PLANNING_REVISION=4
+PLANNING_REVISION=5

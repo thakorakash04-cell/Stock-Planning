@@ -37,3 +37,5 @@ html,body,#root{height:100%;min-height:0;overflow:hidden}
 
 /* Keep record counts and page navigation together across every table. */
 .pagination,.source-pagination{justify-content:flex-start;gap:12px;flex-wrap:wrap}.source-pagination>span{margin-right:0}.pagination>span,.source-pagination>span{flex:0 1 auto}.pagination>div{flex:0 0 auto}
+
+.production-form select{max-width:100%;padding:10px;border:1px solid #dce3eb;border-radius:7px}.materials-ready{color:#18733d!important;background:#edf9f0!important;border-color:#9ccead!important}.materials-short{color:#ad2635!important;background:#fff0f1!important;border-color:#e4a4ac!important}.production-workspace .drawer>h3,.production-workspace .drawer>details{margin:16px 22px}

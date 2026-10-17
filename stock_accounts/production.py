@@ -4,7 +4,7 @@ from datetime import date,datetime,timezone
 from statistics import median
 from .access import require_menu
 
-REVISION=3
+REVISION=4
 QC_HEADERS=['Material Code','Description','Batch','Order Quantity','Confirmed Quantity','Latest 101 Date','Order Number','Material Type']
 ONGOING_HEADERS=['Order Number','Material Type','Material Code','Description','Batch','Order Quantity','Basic Start Date','Expected End Date','Expected FG Quantity','Estimate Basis','Last Saved By','Last Saved At']
 PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At','Segment']
@@ -117,6 +117,8 @@ def read(store,actor):
     from workbook import segment_map
     mapping=segment_map(current['data'].get('tables',[]))
     result['segmentMap']={k:sorted(v) for k,v in mapping.items()}
+    from .production_materials import catalogue,resolve
+    result['materials']=catalogue(current['data'])
     result['segments']=sorted({s for values in mapping.values() for s in values})
     # Resolve a manually typed product name using exact source descriptions.
     product_segments={}
@@ -136,6 +138,8 @@ def read(store,actor):
     for item in result['upcoming']:
         saved_row=next(r for r in saved if r['id']==item['id'] and r['kind']=='upcoming')
         payload=json.loads(saved_row['payload']);chosen=payload.get('segment','')
+        material=resolve(current['data'],payload)
+        item['materialCode']=material['code'] if material else None
         inferred=mapping.get(str(item['row'][0]).strip(),set()) or product_segments.get(str(item['row'][0]).strip().casefold(),set())
         item['segments']=[chosen] if chosen else sorted(inferred)
         item['row'].append(', '.join(item['segments']) or 'Unassigned')
@@ -165,6 +169,12 @@ def save(store,actor,event):
         start=day(value.get('startDate'))
         if not start or start>end or qty<=0:raise ValueError('Enter a positive quantity and start date on or before the end date.')
         payload={k:text(k) for k in ('product','description','batch')}
+        code=value.get('materialCode')
+        if code:
+            from .production_materials import resolve
+            material=resolve(current['data'],{'materialCode':code})
+            if not material:raise ValueError('Select an FG/SFG material from the current workbook.')
+            payload.update(materialCode=material['code'],product=material['code'],description=material['description'])
         if payload['batch'][0].isdigit():raise ValueError('Batch must not start with a numeric character.')
         chosen=value.get('segment','')
         from workbook import segment_map
@@ -186,3 +196,38 @@ def save(store,actor,event):
         if cursor.rowcount!=1:raise ValueError('Someone else changed this row. Refresh Production before saving again.')
         store._log(db,actor.username,'production_plan_saved',kind,actor.session_id)
     return read(store,actor)
+
+
+def selection(store,actor,event):
+    report=read(store,actor)
+    if event.get('version')!=report['version']:raise ValueError('The workbook changed. Refresh Production and reopen the value.')
+    chosen=event.get('selection',{});kind=chosen.get('kind');row=chosen.get('row')
+    if kind=='qc':
+        if row not in report['qc']['rows']:raise ValueError('This QC row changed. Refresh Production.')
+        return row[0],report['qc']['headers']
+    if kind not in ('ongoing','upcoming'):raise ValueError('Invalid production selection.')
+    item=next((r for r in report[kind] if r['id']==chosen.get('id')),None)
+    if not item or item['row']!=row:raise ValueError('This production row changed. Refresh Production.')
+    code=item['row'][2] if kind=='ongoing' else item.get('materialCode')
+    if not code:raise ValueError('Edit this legacy plan and select its FG/SFG material before checking source records.')
+    return code,report['ongoingHeaders'] if kind=='ongoing' else report['upcomingHeaders']
+
+
+def check_availability(store,actor,event):
+    from .production_materials import availability
+    report=read(store,actor)
+    if event.get('version')!=report['version']:raise ValueError('The workbook changed. Refresh Production.')
+    item=next((r for r in report['upcoming'] if r['id']==event.get('id')),None)
+    if not item or item['revision']!=event.get('revision'):raise ValueError('This plan changed. Refresh Production.')
+    if not item.get('materialCode'):raise ValueError('Edit this legacy plan and select its FG/SFG material first.')
+    current=store.get_dataset(actor)
+    if current['version']!=report['version']:raise ValueError('The workbook changed. Refresh Production.')
+    result=availability(current['data'],item['materialCode'],item['row'][3])
+    require_menu(store,actor,3)
+    with store.transaction() as db:
+        store.require(db,actor)
+        latest=store.run(db,"SELECT version FROM datasets WHERE id='current'").fetchone()
+        plan=store.run(db,"SELECT revision FROM production_shared WHERE kind='upcoming' AND id=?",(item['id'],)).fetchone()
+        if not latest or latest['version']!=report['version'] or not plan or plan['revision']!=item['revision']:
+            raise ValueError('The workbook or plan changed. Refresh Production and check again.')
+    return {**result,'version':report['version'],'id':item['id'],'revision':item['revision'],'materialCode':item['materialCode'],'quantity':item['row'][3]}

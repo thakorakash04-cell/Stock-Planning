@@ -215,3 +215,25 @@ plans can be found under Unassigned. Batches beginning with a numeric character
 are excluded from these three views (existing history remains stored). New
 upcoming plans must use a batch that does not start with a digit. All table
 pagination layouts keep Previous/Next beside the record count.
+
+### Upcoming material selector and availability
+
+Upcoming plans now offer a searchable FG/SFG catalogue. Selecting a material
+loads its code and canonical description; legacy plans can be edited to select
+their material. All three new production tables open the existing full-window
+source-record drill-down when a value is clicked. Their matched-record downloads
+validate the production selection server-side.
+
+Each saved upcoming plan has a Material availability control. Green means every
+BOM component is verified as sufficient; red opens shortages or explains why
+availability cannot be verified. Required consumption is calculated as planned
+FG/SFG quantity / BOM base quantity * component quantity, without premature
+integer rounding. Duplicate joined BOM items are removed; distinct consuming
+items are summed per component/unit and stock is deducted once. Current stock
+includes unrestricted and quality-inspection stock; on-order receipts do not
+count. The detail window shows shortages and every BOM calculation, including
+base quantity and consumption. Missing/ambiguous BOMs, invalid quantities,
+unknown stock and mismatched units never produce a green result. The check uses
+one plan against the uploaded snapshot; it does not reserve stock across plans
+or recursively explode SFG subassemblies. Plan revision, workbook version and
+Production access are checked again before the result is returned.
