@@ -39,3 +39,13 @@ html,body,#root{height:100%;min-height:0;overflow:hidden}
 .pagination,.source-pagination{justify-content:flex-start;gap:12px;flex-wrap:wrap}.source-pagination>span{margin-right:0}.pagination>span,.source-pagination>span{flex:0 1 auto}.pagination>div{flex:0 0 auto}
 
 .production-form select{max-width:100%;padding:10px;border:1px solid #dce3eb;border-radius:7px}.materials-ready{color:#18733d!important;background:#edf9f0!important;border-color:#9ccead!important}.materials-short{color:#ad2635!important;background:#fff0f1!important;border-color:#e4a4ac!important}.production-workspace .drawer>h3,.production-workspace .drawer>details{margin:16px 22px}
+
+/* The compact sidebar keeps all workspace destinations reachable by icon. */
+.sidebar-toggle{align-self:flex-end;flex-shrink:0;display:grid;place-items:center;width:30px;height:30px;border:1px solid #dfe8e4;border-radius:7px;color:#277861;background:#fff;margin-bottom:12px}
+.sidebar nav button{position:relative}.sidebar nav button>svg{flex-shrink:0}.sidebar .navtext{min-width:0}.sidebar .navdot{flex-shrink:0}
+.sidebar-collapsed .sidebar{width:76px;padding-left:10px;padding-right:10px}.sidebar-collapsed>main{margin-left:76px}
+.sidebar-collapsed .sidebar-toggle{align-self:center}.sidebar-collapsed .brand{padding:0 0 20px;justify-content:center}.sidebar-collapsed .brand>span{flex-shrink:0}
+.sidebar-collapsed .brand>div,.sidebar-collapsed .navlabel,.sidebar-collapsed .navtext,.sidebar-collapsed .secure,.sidebar-collapsed .user>div,.sidebar-collapsed .signout>span{display:none}
+.sidebar-collapsed .sidebar nav button{justify-content:center;padding:13px 10px;min-height:44px}.sidebar-collapsed .navdot{position:absolute;right:3px;top:7px;margin:0}
+.sidebar-collapsed .sidebottom{padding:16px 0 0}.sidebar-collapsed .user{justify-content:center;margin-top:8px}.sidebar-collapsed .signout{justify-content:center;width:100%;min-height:36px;padding:8px 0}
+@media(max-width:800px){.app{display:flex;flex-direction:column}.sidebar{height:auto;max-height:42vh;flex-shrink:0;position:relative}.sidebar-toggle{position:absolute;right:18px;top:12px;margin:0}.sidebar .brand{padding-right:40px}.app>main{margin-left:0;min-height:0;flex:1}.sidebar-collapsed .sidebar{width:100%;padding:12px 18px}.sidebar-collapsed .brand{justify-content:flex-start;padding-bottom:0}.sidebar-collapsed .sidebar-toggle{top:17px}.sidebar-collapsed .sidebar>nav{display:none}.sidebar-collapsed>main{margin-left:0}}
