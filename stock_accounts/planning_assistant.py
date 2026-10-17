@@ -5,7 +5,7 @@ from grounded_ai import settings,generate,context_for,json_text,ask as query_ask
 from .access import require_menu
 
 ROOT=Path(__file__).resolve().parents[1]
-SOURCES=['PLANNING_RULES.md','README.md','workbook.py','stock_accounts/planning.py','stock_accounts/production.py','stock_accounts/production_materials.py','stock_accounts/lead_time.py']
+SOURCES=['PLANNING_RULES.md','README.md','workbook.py','stock_accounts/planning.py','stock_accounts/production.py','stock_accounts/production_materials.py','stock_accounts/lead_time.py','stock_accounts/insights.py','stock_accounts/insight_attention.py','stock_accounts/planning_assistant.py']
 
 def knowledge():
     digest=hashlib.sha256();catalog=[];rules='';notes=''
@@ -103,3 +103,5 @@ def reply(store,actor,tables,question,history,context,prior=None):
     return {'answer':answer,'evidence':evidence,'model':model,'knowledge_revision':source['revision'],'scenario':scenario}
 
 RESPONSE_STYLE_REVISION=1
+
+KNOWLEDGE_CATALOG_REVISION=1

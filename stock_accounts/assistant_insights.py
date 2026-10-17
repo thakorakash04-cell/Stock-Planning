@@ -33,6 +33,7 @@ def export_evidence(store,actor,event,tables,version):
         current=store.get_dataset(actor)
         table=entry['table'];projection={**event,'headers':event.get('headers',table['headers']),'rows':event.get('rows',table['rows'])}
         return export_table(store,actor,projection,current,table,'Planning assistant results','Planning_assistant_result.xlsx')
+    if entry.get('source_table'):tables=[t for t in tables if t['id']!=entry['source_table']['id']]+[entry['source_table']]
     query=entry['query'];table=next((t for t in tables if t['id']==query['table']),None)
     if table is None:raise ValueError('The source table is no longer available. Ask the question again.')
     result=execute_query(tables,query,all_rows=True)
@@ -73,6 +74,7 @@ def insight_records(store,actor,event,tables,version):
     if entry['version']!=version or event.get('version')!=version:raise ValueError('The workbook changed. Generate insights again.')
     page=event.get('page',0)
     if type(page) is not int or not 0<=page<=10000:raise ValueError('Invalid source table page.')
+    if entry.get('source_table'):tables=[t for t in tables if t['id']!=entry['source_table']['id']]+[entry['source_table']]
     query=entry['query']
     raw={'table':query['table'],'filters':query.get('filters',[]),'limit':20}
     table=next(t for t in tables if t['id']==query['table'])
@@ -92,7 +94,7 @@ def handle_ai(store,actor,event):
         from grounded_ai import settings
         key,model=settings()
         from .planning_assistant import knowledge
-        return {'configured':bool(key),'model':model,'version':version,'tables':len(tables),'filename':filename,'knowledge_revision':knowledge()['revision']}
+        return {'configured':bool(key),'model':model,'version':version,'tables':len(tables),'filename':filename,'knowledge_revision':knowledge()['revision'],'planning_revision':str(data_revision(store,actor)),'report_scope':report_scope(store,actor)}
     if event.get('action')=='ai_clear':
         thread=hashlib.sha256(json_text([version,event.get('context')]).encode()).hexdigest()
         st.session_state.setdefault('_stock_ai_threads',{}).pop(thread,None)
@@ -104,14 +106,19 @@ def handle_ai(store,actor,event):
         from .insights import build_report,report_views
         from .workspace_insights import workspace_payload
         data,_,_=workspace_payload(store,actor)
-        result=build_report(tables,report_views(data))
+        from .insight_attention import prepare
+        current=store.get_dataset(actor)
+        production_revision=str(data_revision(store,actor))
+        report_tables,views,planning_context=prepare(store,actor,tables,report_views(data),current,data)
+        result=build_report(report_tables,views,planning_context)
         store.require_permission(actor,'use_tools')
         if stock_tables(store,actor)[1]!=version:raise ValueError('The workbook changed. Generate the report again.')
+        if str(data_revision(store,actor))!=production_revision:raise ValueError('Production plans changed while analysing. Generate the report again.')
         sources=st.session_state.setdefault('_stock_insight_sources',{})
         for section in result['sections']:
             for chart in section['charts']:
                 token=secrets.token_urlsafe(18)
-                sources[token]={'version':version,'query':chart['evidence']['query']}
+                sources[token]={'version':version,'query':chart['evidence']['query'],'source_table':next((t for t in report_tables if t['id']==chart['evidence']['query']['table']),None)}
                 chart['evidence']['source_id']=token
         while len(sources)>100:sources.pop(next(iter(sources)))
         if store.identity(actor)['role']=='admin':
@@ -119,11 +126,11 @@ def handle_ai(store,actor,event):
             for section in result['sections']:
                 for chart in section['charts']:
                     token=secrets.token_urlsafe(18)
-                    exports[token]={'version':version,'query':chart['evidence']['query']}
+                    exports[token]={'version':version,'query':chart['evidence']['query'],'source_table':next((t for t in report_tables if t['id']==chart['evidence']['query']['table']),None)}
                     chart['evidence']['export_id']=token
             while len(exports)>100:exports.pop(next(iter(exports)))
         store.log_event(actor,'tool_use','Insights & Graphs')
-        return {**result,'version':version}
+        return {**result,'version':version,'planning_revision':production_revision,'report_scope':report_scope(store,actor)}
     context=event.get('context')
     thread=hashlib.sha256(json_text([version,context]).encode()).hexdigest()
     threads=st.session_state.setdefault('_stock_ai_threads',{})
@@ -155,3 +162,12 @@ INSIGHTS_REVISION=3
 AI_EXPORT_REVISION=1
 
 PLANNING_ASSISTANT_REVISION=1
+
+INSIGHT_ATTENTION_REVISION=1
+
+def data_revision(store,actor):
+    from .production import shared
+    return [(r['kind'],r['id'],r['revision'],r['updated_at']) for r in shared(store,actor)]
+
+def report_scope(store,actor):
+    return hashlib.sha256(json_text([actor.username,store.identity(actor)['permissions']]).encode()).hexdigest()[:16]

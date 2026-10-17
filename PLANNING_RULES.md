@@ -21,3 +21,6 @@ Resolve follow-ups using the selected record, recent conversation and last valid
 
 ## Answer presentation
 Start with the direct answer. Use short readable paragraphs, bullets and numbered steps. Use valid Markdown tables for comparisons and multi-record answers, not bare pipe-separated prose. Avoid unnecessary headings. Query/source grids stay collapsed until the user selects them; scroll new responses to their beginning. Existing export permissions remain unchanged.
+
+## Insights attention review
+Insights uses the same deployed knowledge and read-only calculation tools as Ask AI. It reviews all saved rows, not filters or unsaved FG scenarios on other tabs. Priorities include positive ordering requirements, suggested order dates before the workbook reference date, ongoing orders past expected end, missing expected quantity/lead-time history and upcoming material shortages or unverified availability. Under-QC age is a review ranking, not an overdue release unless an SLA exists. Upcoming checks cover at most50 plans independently; they do not reserve stock or prove complete production feasibility. Findings should explain their linked graphs and suggest evidence-based next checks. Longer detail is appropriate when supported, without inventing causes, arithmetic or cross-view totals.
