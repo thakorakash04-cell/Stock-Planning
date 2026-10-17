@@ -20,6 +20,9 @@ import importlib
 from stock_accounts import lead_time as _lead_time
 if getattr(_lead_time,'REVISION',0)!=3:importlib.reload(_lead_time)
 import grounded_ai as _grounded_ai
+if getattr(_grounded_ai,'RESPONSE_STYLE_REVISION',0)!=1:importlib.reload(_grounded_ai)
+from stock_accounts import planning_assistant as _planning_assistant
+if getattr(_planning_assistant,'RESPONSE_STYLE_REVISION',0)!=1:importlib.reload(_planning_assistant)
 from stock_accounts import insights as _insights, assistant_insights as _assistant, workspace_insights as _workspace
 for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:

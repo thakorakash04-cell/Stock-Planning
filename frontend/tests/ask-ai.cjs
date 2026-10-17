@@ -3,9 +3,10 @@ for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,n)=>m._compile(ts.tra
 const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://workspace.test'});
 Object.assign(global,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,CustomEvent:dom.window.CustomEvent,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true});
 dom.window.HTMLElement.prototype.scrollIntoView=function(){};
+Object.defineProperty(dom.window.HTMLElement.prototype,'offsetTop',{configurable:true,get(){return this.classList.contains('assistant')?320:0}});
 const packets=[];let admin=false;
 const downloads=[];global.URL.createObjectURL=blob=>{downloads.push(blob);return 'blob:test'};global.URL.revokeObjectURL=()=>{};dom.window.HTMLAnchorElement.prototype.click=function(){};
-require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>true,isAdmin:()=>admin,openAccount(){},rpc:async(action,payload)=>{packets.push({action,payload});if(action==='ai_status')return {configured:true,model:'model',version:'v1',filename:'stock.xlsx',tables:1};if(action==='generate_insights')return {version:'v1',answer:'## Planning Review\n**Review stock levels.**',generated_at:'2026-10-16',sections:[{view:0,title:'Stock overview',records:3,limitation:'Snapshot only',charts:[{title:'Highest quantity',label:'Material',value:'Qty',evidence:{table:'Stock',matched_records:3,result_rows:3,shown_rows:2,records:[{Material:'A',Qty:9},{Material:'B',Qty:3}]}}]}]};if(action==='ai_export')return {content:Buffer.from('fixture workbook').toString('base64'),filename:'matching.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};if(action==='ask_ai')return {answer:'Quantity is 5 [T1:R30] [Q1].',evidence:[{export_id:'server-download-token',citation:'Q1',table:'Stock',matched_records:1,result_rows:1,shown_rows:1,query:{table:'T1'},records:[{Qty:5}]}]};return {ok:true}}}};
+require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:()=>true,isAdmin:()=>admin,openAccount(){},rpc:async(action,payload)=>{packets.push({action,payload});if(action==='ai_status')return {configured:true,model:'model',version:'v1',filename:'stock.xlsx',tables:1};if(action==='generate_insights')return {version:'v1',answer:'## Planning Review\n**Review stock levels.**',generated_at:'2026-10-16',sections:[{view:0,title:'Stock overview',records:3,limitation:'Snapshot only',charts:[{title:'Highest quantity',label:'Material',value:'Qty',evidence:{table:'Stock',matched_records:3,result_rows:3,shown_rows:2,records:[{Material:'A',Qty:9},{Material:'B',Qty:3}]}}]}]};if(action==='ai_export')return {content:Buffer.from('fixture workbook').toString('base64'),filename:'matching.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};if(action==='ask_ai')return {answer:'Quantity is 5 [T1:R30] [Q1].\n\n## Material review\n\n- **Stock:** 5\n- Plan next\n\n| Material | Quantity |\n| --- | ---: |\n| A | 5 |\n\n<script>alert(1)</script>\n[unsafe](javascript:alert(1))',evidence:[{export_id:'server-download-token',citation:'Q1',table:'Stock',matched_records:1,result_rows:1,shown_rows:1,query:{table:'T1'},records:[{Qty:5}]}]};return {ok:true}}}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root'));
 const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.tsx').default,tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
@@ -29,15 +30,28 @@ const Grid=require('../src/data-grid.tsx').default,AskAI=require('../src/ask-ai.
  await act(async()=>{document.querySelector('form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick()});
  assert.equal(packets.filter(p=>p.action==='ask_ai').length,1);
  assert.equal(packets.find(p=>p.action==='ask_ai').payload.context,null);
- assert.equal([...document.querySelectorAll('.aitext')].at(-1).textContent,'Quantity is 5.');
+ assert.equal(document.querySelector('.answer-markdown p').textContent,'Quantity is 5.');
+ assert.equal(document.querySelector('.answer-markdown h3').textContent,'Material review');
+ assert.equal(document.querySelectorAll('.answer-markdown li').length,2);
+ assert.equal(document.querySelector('.answer-markdown table tbody td').textContent,'A');
+ assert.ok(!document.querySelector('.answer-markdown').textContent.includes('##'));
+ assert.equal(document.querySelector('.answer-markdown script'),null);
+ assert.equal(document.querySelector('.answer-markdown a[href^="javascript:"]'),null);
+ assert.equal(document.querySelector('.aimessages').scrollTop,320,'Scroll aligns to answer start');
+ assert.ok(!document.querySelector('.aievidence').open);
+ assert.equal(document.querySelector('.aievidence .datagrid'),null,'Evidence grid mounts only after selection');
  assert.ok(document.body.textContent.includes('1 matching records'));
  assert.equal(document.querySelector('.aiexport'),null,'Viewers never see the AI download button');
  admin=true;
  await act(async()=>{root.render(React.createElement(AskAI));await tick()});
- assert.ok(document.querySelector('.aiexport'),'Administrators can download each evidence table');
+ await act(async()=>{const query=document.querySelector('.aievidence');query.open=true;query.dispatchEvent(new window.Event('toggle'));await tick()});
+ assert.ok(document.querySelector('.aievidence .datagrid'));
+ assert.ok(document.querySelector('.aiexport'),'Administrators can download each selected evidence table');
+ document.querySelector('.aimessages').scrollTop=123;
  await act(async()=>{document.querySelector('.aiexport').click();await tick()});
  assert.deepEqual(packets.find(p=>p.action==='ai_export').payload,{export_id:'server-download-token',version:'v1'});
  assert.equal(downloads[0].type,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+ assert.equal(document.querySelector('.aimessages').scrollTop,123,'Downloads do not move transcript to the end');
  admin=false;
 
  await act(async()=>{[...document.querySelectorAll('.aichat button')].find(b=>b.textContent==='Clear chat').click();await tick()});assert.ok(packets.some(p=>p.action==='ai_clear'));

@@ -4,5 +4,5 @@ export function answerText(text:string):string {
  return text
   .replace(new RegExp(String.raw`[\[(]\s*${reference}(?:\s*[,;]\s*${reference})*\s*[\])]`,'gi'),'')
   .replace(new RegExp(String.raw`\bT\d+\s*:\s*(?:R|T)?\d+(?:\s*[-–]\s*(?:T\d+\s*:\s*)?(?:R|T)?\d+)?\b`,'gi'),'')
-  .replace(/[ \t]{2,}/g,' ').replace(/ +([.,;!?])/g,'$1').replace(/ +$/gm,'').trim();
+  .replace(/(?<=\S)[ \t]{2,}/g,' ').replace(/ +([.,;!?])/g,'$1').replace(/ +$/gm,'').trim();
 }
