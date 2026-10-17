@@ -1,7 +1,7 @@
 import {selectDetails} from './detail-rules';
 import {segmentIndex,filterSegments} from './segments';
 import type {ModelTable} from './model-data';
-type Args={version?:string;data?:Record<string,any>|null;tables?:ModelTable[]|null;user:string;role:string;permissions?:Record<string,boolean>;response?:{id:string;body:any;error?:string}};
+type Args={preferences?:Record<string,any>;version?:string;data?:Record<string,any>|null;tables?:ModelTable[]|null;user:string;role:string;permissions?:Record<string,boolean>;response?:{id:string;body:any;error?:string}};
 let state:Args|null=null,parentOrigin='*',lastHeight=0,lastActivity=Date.now()/1000;
 for(const name of ['pointerdown','keydown','touchstart'])window.addEventListener(name,()=>{lastActivity=Date.now()/1000},{passive:true});
 function fitFrame(){let height=window.screen.availHeight-140;try{height=window.parent.innerHeight}catch{}height=Math.max(240,height);if(height!==lastHeight){lastHeight=height;send('streamlit:setFrameHeight',{height})}}
@@ -11,10 +11,11 @@ const send=(type:string,extra:Record<string,unknown>)=>window.parent.postMessage
 export const isAdmin=()=>state?.role==='admin';
 export const can=(permission:string)=>isAdmin()||state?.permissions?.[permission]===true;
 export async function authorizeExport(){try{await rpc('export');return true}catch(e){alert(e instanceof Error?e.message:String(e));return false}}
-export function rpc(action:string,payload:Record<string,unknown>={}):Promise<any>{const work=()=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();waiting.set(id,{resolve,reject});send('streamlit:setComponentValue',{value:{...payload,id,action,activity:lastActivity},dataType:'json'});setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(new Error('Request timed out. Please retry.'))}},120000)});const result=queue.then(work);queue=result.catch(()=>{});return result;}
+export function rpc(action:string,payload:Record<string,unknown>={}):Promise<any>{if(action!=='preferences_save')flushPreferences();const owner=state?.user;const work=()=>new Promise((resolve,reject)=>{if(action==='preferences_save'&&state?.user!==owner){resolve({skipped:true});return}const id=crypto.randomUUID();waiting.set(id,{resolve,reject});send('streamlit:setComponentValue',{value:{...payload,id,action,activity:lastActivity},dataType:'json'});setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(new Error('Request timed out. Please retry.'))}},120000)});const result=queue.then(work);queue=result.catch(()=>{});return result;}
 // Navigation must not wait behind an export, heartbeat or timed-out RPC.
 export function openAccount(action:'open_admin'|'open_password'){
- send('streamlit:setComponentValue',{value:{id:crypto.randomUUID(),action,activity:lastActivity},dataType:'json'});
+ const navigate=()=>send('streamlit:setComponentValue',{value:{id:crypto.randomUUID(),action,activity:lastActivity},dataType:'json'});
+ if(dirtyPreferences.size){flushPreferences();Promise.allSettled([...dirtyPreferences.values()].map(p=>(p as any).promise)).then(navigate)}else navigate();
 }
 export async function uploadWorkbook(file:File){const bytes=new Uint8Array(await file.arrayBuffer());let raw='';for(let i=0;i<bytes.length;i+=32768)raw+=String.fromCharCode(...bytes.subarray(i,i+32768));return rpc('upload',{filename:file.name,content:btoa(raw)})}
 export function startBridge(onReady:(args:Args)=>void){
@@ -24,8 +25,14 @@ export function startBridge(onReady:(args:Args)=>void){
   parentOrigin=event.origin;
   const args=event.data.args as Args;if(!args?.user)return;
   const changed=Boolean(args.data)&&(!state?.data||args.version!==state.version);
-  state={...state,...args,data:changed?args.data:state?.data,tables:changed?args.tables:state?.tables};
+  const userChanged=Boolean(state?.user)&&state?.user!==args.user;
+  if(userChanged){dirtyPreferences.clear();if(preferenceTimer)clearTimeout(preferenceTimer);preferenceTimer=undefined}
+  const oldPreferences=JSON.stringify(state?.preferences||{});
+  const mergedPreferences={...(args.preferences||state?.preferences||{})};
+  for(const [key,pending] of dirtyPreferences)mergedPreferences[key]=pending.value;
+  state={...state,...args,preferences:mergedPreferences,data:changed?args.data:state?.data,tables:changed?args.tables:state?.tables};
   if(changed)window.dispatchEvent(new Event('stock-data-updated'));
+  if(userChanged||JSON.stringify(state.preferences)!==oldPreferences)window.dispatchEvent(new Event('stock-preferences-ready'));
   if(args.response){const pending=waiting.get(args.response.id);if(pending){waiting.delete(args.response.id);args.response.error?pending.reject(new Error(args.response.error)):pending.resolve(args.response.body)}}
   if(state?.data)readyListener?.(state);
   fitFrame();
@@ -43,4 +50,25 @@ export async function downloadPlanningTable(source:string,headers:string[],rows:
  const file=await rpc('planning_table_export',{source,headers,rows,plan_id,version:state?.version});
  const bytes=Uint8Array.from(atob(file.content),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([bytes],{type:file.mime}));
  const link=document.createElement('a');link.href=url;link.download=file.filename;link.click();URL.revokeObjectURL(url);
+}
+
+const dirtyPreferences=new Map<string,{value:any;generation:number}>();
+let preferenceTimer:ReturnType<typeof setTimeout>|undefined,preferenceGeneration=0;
+export function readViewPreference(key:string){return state?.preferences?.[key]}
+export function saveViewPreference(key:string,value:any){
+ if(!state?.user)return;
+ state.preferences={...state.preferences,[key]:value};
+ dirtyPreferences.set(key,{value,generation:++preferenceGeneration});
+ if(preferenceTimer)clearTimeout(preferenceTimer);
+ preferenceTimer=setTimeout(flushPreferences,500);
+}
+export function flushPreferences(){
+ if(preferenceTimer){clearTimeout(preferenceTimer);preferenceTimer=undefined}
+ for(const [scope,pending] of dirtyPreferences){
+  if((pending as any).sending)continue;
+  (pending as any).sending=true;
+  const request=rpc('preferences_save',{scope,value:pending.value});(pending as any).promise=request;request.then(()=>{
+   if(dirtyPreferences.get(scope)?.generation===pending.generation)dirtyPreferences.delete(scope);
+  }).catch(()=>{if(dirtyPreferences.get(scope)?.generation===pending.generation)(pending as any).sending=false;window.dispatchEvent(new Event('stock-preferences-error'))});
+ }
 }

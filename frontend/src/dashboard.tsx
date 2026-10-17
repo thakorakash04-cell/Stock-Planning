@@ -9,6 +9,7 @@ import DataGrid from './data-grid';
 import SourceDetails from './source-details';
 import OrderPlanning from './order-planning';
 import Production from './production';
+import {useViewPreference} from './view-preference';
 import {Boxes,LayoutDashboard,Layers,ShoppingCart,TrendingUp,Factory,Upload,Search,ChevronRight,ChevronDown,X,Download,RefreshCw,ShieldCheck,ArrowUpRight,FileSpreadsheet,LogOut,Users,Sparkles,ChartNoAxesCombined} from 'lucide-react';
 type Cell=string|number|null;type Sheet={name:string;headers:string[];rows:Cell[][]};type Data={filename:string;updatedAt:string|null;asOf:string;sheets:Sheet[];accessibleTabs?:number[];segmentMap?:Record<string,string[]>};
 const titles=['Stock overview','BOM cost','Sales & transfers','Production','Forecast planning','Forecast purchasing','Order requirements'];
@@ -17,7 +18,11 @@ const specs=[['Summary',7,2,6,[]],['BOM Cost',5,2,9,[]],['Sales Data',5,2,10,[0]
 const fmt=(v:Cell)=>v===null?'—':typeof v==='number'?v.toLocaleString('en-IN',{maximumFractionDigits:2}):v;
 export default function Dashboard({user}:{user:string}){
 const [planningOpened,setPlanningOpened]=useState(false);
-const [adminOpen,setAdminOpen]=useState(false),[data,setData]=useState<Data|null>(null),[tab,setTab]=useState(0),[q,setQ]=useState(''),[filter,setFilter]=useState('all'),[sort,setSort]=useState({col:-1,dir:1}),[page,setPage]=useState(0),[detail,setDetail]=useState<Cell[]|null>(null),[detailCell,setDetailCell]=useState(-1),[upload,setUpload]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[forecastMode,setForecastMode]=useState('totals'),[segment,setSegment]=useState('all'),[group,setGroup]=useState(-1),[expanded,setExpanded]=useState<Set<string>>(new Set());
+const [adminOpen,setAdminOpen]=useState(false),[data,setData]=useState<Data|null>(null),[tab,setTab]=useState(0),[sort,setSort]=useState({col:-1,dir:1}),[page,setPage]=useState(0),[detail,setDetail]=useState<Cell[]|null>(null),[detailCell,setDetailCell]=useState(-1),[upload,setUpload]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[expanded,setExpanded]=useState<Set<string>>(new Set());
+const [view,setView]=useViewPreference('section:'+tab,{q:'',filter:'all',segment:'all',group:-1,forecastMode:'totals'});
+const {q,filter,segment,group,forecastMode}=view;
+const setQ=(q:string)=>setView(v=>({...v,q})),setFilter=(filter:string)=>setView(v=>({...v,filter})),setSegment=(segment:string)=>setView(v=>({...v,segment})),setGroup=(group:number)=>setView(v=>({...v,group})),setForecastMode=(forecastMode:string)=>setView(v=>({...v,forecastMode}));
+useEffect(()=>{const failed=()=>setError('Your view settings could not be saved. Check the connection and change the setting again to retry.');window.addEventListener('stock-preferences-error',failed);return()=>window.removeEventListener('stock-preferences-error',failed)},[]);
 async function load(){try{const r=await fetch('/api/data');if(!r.ok)throw Error('Please sign in again to load your dashboard.');setData(await r.json());setError('');}catch(e){setError(String(e));}}
 useEffect(()=>{load();window.addEventListener('stock-data-updated',load);const t=setInterval(load,60000);return()=>{clearInterval(t);window.removeEventListener('stock-data-updated',load)}},[]);
 useEffect(()=>{setDetail(null)},[data?.updatedAt]);
@@ -27,7 +32,7 @@ useEffect(()=>{if(data?.accessibleTabs&&!data.accessibleTabs.includes(tab)){cons
 const rawSheet=data?.sheets[tab];const sheet=useMemo(()=>rawSheet&&tab===4&&forecastMode==='totals'?{...rawSheet,headers:forecastHeaders,rows:forecastSummary(rawSheet.rows)}:rawSheet,[rawSheet,tab,forecastMode]);const segments=[...new Set(Object.values(data?.segmentMap||{}).flat())].sort();
 const rows=useMemo(()=>{let a=sheet?.rows.filter(r=>r.some(v=>String(v??'').toLowerCase().includes(q.toLowerCase())))||[];if(segment!=='all')a=a.filter(r=>(data?.segmentMap?.[String(r[tab===2||tab===3?3:0])]||[]).includes(segment));if(filter==='shortage')a=a.filter(r=>typeof r[r.length-1]==='number'&&Number(r[r.length-1])>0);if(filter==='zero')a=a.filter(r=>r[2]===0);if(sort.col>=0)a=[...a].sort((a,b)=>{const x=a[sort.col],y=b[sort.col];return(typeof x==='number'&&typeof y==='number'?x-y:String(x??'').localeCompare(String(y??'')))*sort.dir});return a},[sheet,q,sort,filter,segment,data?.segmentMap,tab]);
 useEffect(()=>{setPage(0);setExpanded(new Set())},[tab,q,filter,group]);
-function navigate(i:number){if(!menuAllowed(i))return;if(i===6)setPlanningOpened(true);setTab(i);setQ('');setFilter('all');setSort({col:-1,dir:1});setGroup(-1)}
+function navigate(i:number){if(!menuAllowed(i))return;if(i===6)setPlanningOpened(true);setTab(i);setSort({col:-1,dir:1})}
 useEffect(()=>{if(tab>=0&&tab<7)rpc('view',{tab}).catch(()=>{})},[tab]);
 async function saveFile(file:File){setBusy(true);setError('');try{if(file.size>25000000)throw Error('Choose a workbook under 25 MB.');await uploadWorkbook(file);await load();setUpload(false);setNotice('Workbook updated successfully. All seven views and embedded model tables now use the latest upload.');setTimeout(()=>setNotice(''),10000)}catch(e){setError(e instanceof Error?e.message:'Upload failed. Your previous data is unchanged.')}finally{setBusy(false)}}
 function exportCSV(){if(!sheet)return;const csv=[sheet.headers,...rows].map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n');const a=document.createElement('a');const u=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv'}));a.href=u;a.download=titles[tab]+'.csv';a.click();URL.revokeObjectURL(u)}

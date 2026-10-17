@@ -266,3 +266,25 @@ before/after values cannot be recovered. Internal timestamps remain absolute
 instants; production saved times, history, account logs, upload times and Insights
 generation times are explicitly displayed in Asia/Kolkata (IST), independent of
 the viewer's browser/server timezone. Date-only planning dates are unchanged.
+
+## Private saved filters and column views
+
+View settings are now saved in `user_view_preferences` under the authenticated
+username and a distinct section/table scope. Column filters, visible columns,
+totals and sorting survive logouts, future logins and use on another browser.
+Sidebar searches, segment selections, grouping and forecast mode are stored per
+section; the new production tables keep separate segment/grouping settings.
+Drill-down tables also have distinct scopes for each originating section and
+source table. Older unowned browser-local settings are not imported into another
+user's account.
+
+Changes save automatically after a short debounce, and pending changes flush
+before queued navigation/logout requests. Users can clear column filters or use
+Reset table view to reset that table's saved view. Saving never changes another
+user's preferences or shared workbook data. Preferences survive workbook updates;
+only fields available in the current table are applied.
+
+The three new Production tables load by default when Production opens. A new
+uploaded workbook automatically reloads their source data, clears stale
+availability/detail windows and ignores older in-flight responses. The saved
+filters and column views remain intact.

@@ -40,6 +40,9 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
+    if action=="preferences_save":
+        from .preferences import save
+        return save(store,actor,event)
     from .access import require_menu
     if action=='production_history':
         from .production_history import read as history
@@ -171,9 +174,10 @@ def render_exact_workspace(store,actor,identity):
     data,tables,version=workspace_payload(store,actor)
     # Stable arguments also let a newly mounted iframe recover without issuing
     # refresh requests. The browser applies data only when its version changes.
-    _component(data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],permissions=identity["permissions"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
+    from .preferences import read as read_preferences
+    _component(preferences=read_preferences(store,actor),data=data,tables=tables,version=version,user=identity["username"],role=identity["role"],permissions=identity["permissions"],response=st.session_state.get("_ui_response"),default=None,key="exact_website_ui")
 
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
 
-PLANNING_REVISION=6
+PLANNING_REVISION=7

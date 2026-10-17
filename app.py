@@ -21,7 +21,7 @@ for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
 # Refresh the dispatcher when an already-running process gains planning RPCs.
-if getattr(_workspace,'PLANNING_REVISION',0)!=6:
+if getattr(_workspace,'PLANNING_REVISION',0)!=7:
     importlib.reload(_workspace)
 from stock_accounts import planning as _planning, matched_export as _matched_export
 for _module in (_planning,_matched_export):
