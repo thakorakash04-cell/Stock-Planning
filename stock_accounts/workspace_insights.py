@@ -74,7 +74,7 @@ def handle_request(store,actor,event):
     if action=='ai_status':
         from .access import allowed
         if not (allowed(identity,7) or allowed(identity,8)):require_menu(store,actor,7)
-    if action in ('generate_insights','insight_records'):require_menu(store,actor,8)
+    if action in ('generate_insights','insight_records','add_insight_chart'):require_menu(store,actor,8)
 
     if action=="planning_table_export":
         from .planning import export_planning_table
@@ -85,7 +85,7 @@ def handle_request(store,actor,event):
     if action in ("planning_status","planning_calculate"):
         from .planning import handle_planning
         return handle_planning(store,actor,event)
-    if action in ('ai_status','ask_ai','ai_clear','ai_export','generate_insights','insight_records'):
+    if action in ('ai_status','ask_ai','ai_clear','ai_export','generate_insights','insight_records','add_insight_chart'):
         from .assistant_insights import handle_ai
         return handle_ai(store,actor,event)
     if action in ("heartbeat","refresh","ack"):
@@ -188,4 +188,4 @@ def render_exact_workspace(store,actor,identity):
 # Increment with analysis protocol changes to invalidate hot-deployment helpers.
 INSIGHTS_REVISION=3
 
-PLANNING_REVISION=10
+PLANNING_REVISION=11

@@ -102,6 +102,9 @@ def handle_ai(store,actor,event):
         return {'ok':True}
     if event.get('consent') is not True:raise ValueError('Enable sharing the question and relevant loaded records with Google Gemini first.')
     if event.get('version')!=version:raise ValueError('The workbook changed. Refresh this chat and ask again using the current data.')
+    if event.get('action')=='add_insight_chart':
+        from .custom_insight import handle
+        return handle(store,actor,event,tables,version)
     if event.get('action')=='generate_insights':
         from .insights import build_report,report_views
         from .workspace_insights import workspace_payload
@@ -130,7 +133,12 @@ def handle_ai(store,actor,event):
                     chart['evidence']['export_id']=token
             while len(exports)>100:exports.pop(next(iter(exports)))
         store.log_event(actor,'tool_use','Insights & Graphs')
-        return {**result,'version':version,'planning_revision':production_revision,'report_scope':report_scope(store,actor)}
+        report_id=secrets.token_urlsafe(18)
+        reports=st.session_state.setdefault('_stock_custom_reports',{})
+        reports[report_id]={'version':version,'planning_revision':production_revision,'scope':report_scope(store,actor),'knowledge_revision':result.get('knowledge_revision',planning_context['knowledge']['revision']),
+                            'charts':{s['view']:[{'title':c['title'],'query':c['evidence']['query']} for c in s['charts']] for s in result['sections']}}
+        while len(reports)>5:reports.pop(next(iter(reports)))
+        return {**result,'version':version,'report_id':report_id,'planning_revision':production_revision,'report_scope':report_scope(store,actor)}
     context=event.get('context')
     thread=hashlib.sha256(json_text([version,context]).encode()).hexdigest()
     threads=st.session_state.setdefault('_stock_ai_threads',{})
@@ -171,3 +179,5 @@ def data_revision(store,actor):
 
 def report_scope(store,actor):
     return hashlib.sha256(json_text([actor.username,store.identity(actor)['permissions']]).encode()).hexdigest()[:16]
+
+CUSTOM_INSIGHT_REVISION=1
