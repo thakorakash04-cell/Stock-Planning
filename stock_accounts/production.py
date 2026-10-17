@@ -4,10 +4,10 @@ from datetime import date,datetime,timezone
 from statistics import median
 from .access import require_menu
 
-REVISION=1
+REVISION=3
 QC_HEADERS=['Material Code','Description','Batch','Order Quantity','Confirmed Quantity','Latest 101 Date','Order Number','Material Type']
 ONGOING_HEADERS=['Order Number','Material Type','Material Code','Description','Batch','Order Quantity','Basic Start Date','Expected End Date','Expected FG Quantity','Estimate Basis','Last Saved By','Last Saved At']
-PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At']
+PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At','Segment']
 
 def day(v):
     if isinstance(v,datetime):return v.date()
@@ -65,12 +65,14 @@ def build(current):
         bybatch.setdefault((ident(r.get('Material Number')),ident(r.get('Batch'))),[]).append(r)
     qc=[]
     for key,(d,m) in receipts.items():
-        if key in released or not month_start(ref,5)<=d<=ref:continue
+        if key[1][0].isdigit() or key in released or not month_start(ref,5)<=d<=ref:continue
         matches=bybatch.get(key,[])
         for r in matches or [{}]:
             qc.append([key[0],r.get('Material description') or m.get('Material Description'),key[1],r.get('Order quantity (GMEIN)'),r.get('Confirmed quantity (GMEIN)'),d.isoformat(),r.get('Order'),m.get('Material Type')])
     ongoing=[]
     for r in orders:
+        batch=ident(r.get('Batch'))
+        if batch and batch[0].isdigit():continue
         start=day(r.get('Basic start date'));qty=r.get('Order quantity (GMEIN)');confirmed=r.get('Confirmed quantity (GMEIN)')
         if not number(confirmed) or confirmed!=0 or not start or not month_start(ref,2)<=start<=ref or r.get('Deletion flag'):continue
         material=ident(r.get('Material Number'));history=[]
@@ -112,12 +114,31 @@ def read(store,actor):
     # Upcoming plans remain available even when an old upload lacks source tables.
     try:result=build(current)
     except ValueError as exc:result={'version':current['version'],'error':str(exc),'ongoing':[],'qc':{'headers':QC_HEADERS,'rows':[]},'ongoingHeaders':ONGOING_HEADERS,'upcomingHeaders':PLAN_HEADERS}
+    from workbook import segment_map
+    mapping=segment_map(current['data'].get('tables',[]))
+    result['segmentMap']={k:sorted(v) for k,v in mapping.items()}
+    result['segments']=sorted({s for values in mapping.values() for s in values})
+    # Resolve a manually typed product name using exact source descriptions.
+    product_segments={}
+    for table in current['data'].get('tables',[]):
+        headers=table['headers']
+        code=next((h for h in ('Material','Material Number','Material Code') if h in headers),None)
+        desc=next((h for h in ('Material(text)','Material description','Material Description','Material Name') if h in headers),None)
+        if code and desc:
+            for row in table['rows']:
+                product_segments.setdefault(str(row[headers.index(desc)] or '').strip().casefold(),set()).update(mapping.get(ident(row[headers.index(code)]),set()))
     saved=shared(store,actor);overrides={r['id']:r for r in saved if r['kind']=='ongoing'}
     for item in result['ongoing']:
         old=overrides.get(item['id'])
         if old:
             value=json.loads(old['payload']);item['row'][7:9]=[value['endDate'],value['quantity']];item['row'][9]='Saved planning override';item['row'][10:]=[old['updated_by'],timestamp(old['updated_at'])];item['revision']=old['revision']
-    result['upcoming']=[{'id':r['id'],'revision':r['revision'],'row':[*(json.loads(r['payload'])[k] for k in ('product','description','batch','quantity','startDate','endDate')),r['updated_by'],timestamp(r['updated_at'])]} for r in saved if r['kind']=='upcoming']
+    result['upcoming']=[{'id':r['id'],'revision':r['revision'],'row':[*(json.loads(r['payload'])[k] for k in ('product','description','batch','quantity','startDate','endDate')),r['updated_by'],timestamp(r['updated_at'])]} for r in saved if r['kind']=='upcoming' and not str(json.loads(r['payload']).get('batch','')).strip()[:1].isdigit()]
+    for item in result['upcoming']:
+        saved_row=next(r for r in saved if r['id']==item['id'] and r['kind']=='upcoming')
+        payload=json.loads(saved_row['payload']);chosen=payload.get('segment','')
+        inferred=mapping.get(str(item['row'][0]).strip(),set()) or product_segments.get(str(item['row'][0]).strip().casefold(),set())
+        item['segments']=[chosen] if chosen else sorted(inferred)
+        item['row'].append(', '.join(item['segments']) or 'Unassigned')
     return result
 
 
@@ -143,7 +164,14 @@ def save(store,actor,event):
             return v.strip()
         start=day(value.get('startDate'))
         if not start or start>end or qty<=0:raise ValueError('Enter a positive quantity and start date on or before the end date.')
-        payload={k:text(k) for k in ('product','description','batch')};payload.update(quantity=qty,startDate=start.isoformat(),endDate=end.isoformat())
+        payload={k:text(k) for k in ('product','description','batch')}
+        if payload['batch'][0].isdigit():raise ValueError('Batch must not start with a numeric character.')
+        chosen=value.get('segment','')
+        from workbook import segment_map
+        valid_segments={s for values in segment_map(current['data'].get('tables',[])).values() for s in values}
+        if not isinstance(chosen,str) or chosen and chosen not in valid_segments:raise ValueError('Choose a segment from the current workbook.')
+        payload['segment']=chosen
+        payload.update(quantity=qty,startDate=start.isoformat(),endDate=end.isoformat())
         if key is None:key=uuid.uuid4().hex
         if not isinstance(key,str) or not re.fullmatch('[a-f0-9]{32}',key):raise ValueError('Invalid plan ID.')
     with store.transaction() as db:

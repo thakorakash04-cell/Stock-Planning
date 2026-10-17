@@ -206,3 +206,12 @@ shared upcoming production plans.
   These control section access; underlying records may still be available in an
   authorised section's drill-down or Ask AI context. Permission changes revoke
   existing sessions, so the viewer signs in again for the new rights.
+
+The three new Production tables each have their own grouping selector and segment
+filter. Material-backed rows use the workbook's Source.Name segment mapping.
+Upcoming plans infer a segment from an exact material code/product-name match,
+or an authorised editor can choose a workbook segment explicitly; unresolved
+plans can be found under Unassigned. Batches beginning with a numeric character
+are excluded from these three views (existing history remains stored). New
+upcoming plans must use a batch that does not start with a digit. All table
+pagination layouts keep Previous/Next beside the record count.

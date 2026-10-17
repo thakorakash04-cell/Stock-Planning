@@ -90,3 +90,40 @@ def test_stale_workbook_cannot_save_and_disabled_edit_right_stays_denied(account
     store.update_permissions(admin,'viewer_user',{'edit_upcoming':True})
     viewer=store.login('viewer_user','Test-viewer-password!123')
     with pytest.raises(PermissionError):save(store,viewer,{**event,'version':store.get_dataset(viewer)['version']})
+
+
+def test_numeric_prefix_batches_are_excluded_from_new_views(accounts):
+    d=fixture();orders=d['tables'][0];oi=orders['headers'].index('Batch')
+    for r in orders['rows']:
+        if r[oi]=='OPEN':r[oi]=' 123ABC'
+    moves=d['tables'][1];mi=moves['headers'].index('Batch')
+    for r in moves['rows']:
+        if r[mi]=='QC':r[mi]='9QC'
+    for r in orders['rows']:
+        if r[oi]=='QC':r[oi]='9QC'
+    result=build({'data':d,'version':'v','updated_at':0})
+    assert not result['qc']['rows']
+    assert all(not str(i['row'][4]).strip()[0].isdigit() for i in result['ongoing'])
+    store,admin,viewer=accounts;store.save_dataset(admin,'master.xlsx',d);status=read(store,admin)
+    event={'kind':'upcoming','version':status['version'],'revision':0,'value':{'product':'Product','description':'Size','batch':'123ABC','quantity':1,'startDate':'2026-11-01','endDate':'2026-11-02'}}
+    with pytest.raises(ValueError,match='numeric'):save(store,admin,event)
+    # A legacy numeric plan remains stored, but is omitted from the view.
+    import time
+    with store.transaction() as db:
+        store.run(db,'INSERT INTO production_shared(kind,id,payload,revision,updated_by,updated_at) VALUES(?,?,?,1,?,?)',('upcoming','a'*32,json.dumps(event['value']),admin.username,time.time()))
+    assert read(store,viewer)['upcoming']==[]
+
+
+def test_production_segments_resolve_material_and_saved_upcoming_segment(accounts):
+    store,admin,viewer=accounts;d=fixture()
+    d['tables'].append({'name':'Unique Material','headers':['Material','Source.Name','Material(text)'],'rows':[['A','Wound.xlsx','Product A'],['B','Other.xlsx','Product B']]})
+    store.save_dataset(admin,'master.xlsx',d);status=read(store,viewer)
+    assert status['segments']==['Other','Wound']
+    assert status['segmentMap']['A']==['Wound']
+    value={'product':'Product A','description':'Size A','batch':'NEXT','quantity':10,'startDate':'2026-11-01','endDate':'2026-11-02'}
+    event={'kind':'upcoming','version':status['version'],'revision':0,'value':value}
+    inferred=save(store,admin,event)['upcoming'][0]
+    assert inferred['segments']==['Wound'] and inferred['row'][-1]=='Wound'
+    explicit=save(store,admin,{**event,'value':{**value,'product':'Manual product','batch':'NEXTB','segment':'Other'}})
+    assert next(i for i in explicit['upcoming'] if i['row'][2]=='NEXTB')['segments']==['Other']
+    with pytest.raises(ValueError,match='segment'):save(store,admin,{**event,'value':{**value,'segment':'Unknown'}})

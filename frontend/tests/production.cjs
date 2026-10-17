@@ -3,7 +3,7 @@ for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,n)=>m._compile(ts.tra
 const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'https://workspace.test'});
 Object.assign(global,{window:dom.window,document:dom.window.document,HTMLElement:dom.window.HTMLElement,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true});
 let edit=false;const calls=[];
-const report={version:'v1',referenceDate:'2026-10-10',referenceBasis:'Worksheet date',ongoingHeaders:['Order','Type','Material','Description','Batch','Qty','Start','Expected end','Expected FG','Basis','Saved by','Saved at'],ongoing:[{id:'order1',revision:0,row:[1,'ZFGS','A','Item','B1',100,'2026-10-01','2026-10-25',85,'History',null,null]}],qc:{headers:['Material','Batch','Latest 101'],rows:[['A','B2','2026-10-04']]},upcomingHeaders:['Product','Description','Batch','Qty','Start','End'],upcoming:[]};
+const report={segments:['Wound'],segmentMap:{A:['Wound']},version:'v1',referenceDate:'2026-10-10',referenceBasis:'Worksheet date',ongoingHeaders:['Order','Type','Material','Description','Batch','Qty','Start','Expected end','Expected FG','Basis','Saved by','Saved at'],ongoing:[{id:'order1',revision:0,row:[1,'ZFGS','A','Item','B1',100,'2026-10-01','2026-10-25',85,'History',null,null]}],qc:{headers:['Material','Batch','Latest 101'],rows:[['A','B2','2026-10-04']]},upcomingHeaders:['Product','Description','Batch','Qty','Start','End'],upcoming:[]};
 require.cache[require.resolve('../src/bridge.ts')]={id:'bridge',filename:require.resolve('../src/bridge.ts'),loaded:true,exports:{can:p=>edit&&p.startsWith('edit_'),isAdmin:()=>false,rpc:async(action,payload)=>{calls.push({action,payload});return report}}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root')),Production=require('../src/production.tsx').default;
 const tick=()=>new Promise(r=>setImmediate(r));
@@ -12,6 +12,14 @@ async function change(key,value){await act(async()=>{const el=document.querySele
  await act(async()=>{root.render(React.createElement(Production,{revision:'v1'},React.createElement('p',null,'Completed table')));await tick()});
  assert.equal(document.querySelectorAll('.production-section').length,4);assert.ok([...document.querySelectorAll('.production-section')].every(d=>d.tagName==='DETAILS'));
  assert.ok(!document.body.textContent.includes('Add upcoming batch'));
+ assert.equal(document.querySelectorAll('.production-section select[aria-label^="Group "]').length,3,'Each new table has a grouping selector');
+ await act(async()=>{const select=document.querySelector('[aria-label="Group ongoing records"]');select.value='2';select.dispatchEvent(new window.Event('change',{bubbles:true}));await tick()});
+ assert.ok(document.querySelector('.production-section:nth-of-type(2) .group'),'Grouping displays collapsible record groups');
+ assert.equal(document.querySelectorAll('select[aria-label^="Filter "][aria-label$=" by segment"]').length,3,'Each new table has a segment filter');
+ await act(async()=>{const select=document.querySelector('[aria-label="Filter qc by segment"]');select.value='unassigned';select.dispatchEvent(new window.Event('change',{bubbles:true}));await tick()});
+ assert.ok(document.querySelector('.production-section:nth-of-type(3)').textContent.includes('No records match these filters.'));
+
+
  edit=true;await act(async()=>{root.render(React.createElement(Production,{revision:'v1'},'Completed table'));await tick()});
  await act(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent==='Add upcoming batch').click();await tick()});
  for(const [k,v] of Object.entries({product:'Product A',description:'Size A',batch:'NEXT',quantity:'100',startDate:'2026-11-01',endDate:'2026-11-10'}))await change(k,v);
