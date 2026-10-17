@@ -21,17 +21,17 @@ for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
 # Refresh the dispatcher when an already-running process gains planning RPCs.
-if getattr(_workspace,'PLANNING_REVISION',0)!=5:
+if getattr(_workspace,'PLANNING_REVISION',0)!=6:
     importlib.reload(_workspace)
 from stock_accounts import planning as _planning, matched_export as _matched_export
 for _module in (_planning,_matched_export):
     if getattr(_module,'TABLE_EXPORT_REVISION',0)!=(2 if _module is _matched_export else 1):
         importlib.reload(_module)
 from stock_accounts import production as _production
-if getattr(_production,'REVISION',0)!=5:importlib.reload(_production)
+if getattr(_production,'REVISION',0)!=6:importlib.reload(_production)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
 from stock_accounts import auth as _account_auth
-if getattr(_account_auth,'PRODUCTION_ACCESS_REVISION',0)!=2:importlib.reload(_account_auth)
+if getattr(_account_auth,'PRODUCTION_ACCESS_REVISION',0)!=3:importlib.reload(_account_auth)
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 
 st.set_page_config(page_title="Stock & Planning",page_icon="📦",layout="wide")
@@ -159,7 +159,8 @@ def dashboard_page(store,actor,identity):
     if "detail" in st.session_state:
         details_page(dataset,mapping,"All segments");return
     st.title("Stock & Planning")
-    date=datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).strftime("%d %b %Y %H:%M UTC")
+    from stock_accounts.clock import display
+    date=display(current["updated_at"])
     st.caption(f"{current['filename']} · Updated {date}")
     a,b=st.columns([2,1])
     title=a.selectbox("Worksheet view",TITLES)

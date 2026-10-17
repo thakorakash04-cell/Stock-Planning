@@ -3,11 +3,13 @@ import hashlib,json,math,re,time,uuid
 from datetime import date,datetime,timezone
 from statistics import median
 from .access import require_menu
+from .clock import IST,display as timestamp
+from .production_history import record as history_record
 
-REVISION=5
+REVISION=6
 QC_HEADERS=['Material Code','Description','Batch','Order Quantity','Confirmed Quantity','Latest 101 Date','Order Number','Material Type']
-ONGOING_HEADERS=['Order Number','Material Type','Material Code','Description','Batch','Order Quantity','Basic Start Date','Expected End Date','Expected FG Quantity','Estimate Basis','Last Saved By','Last Saved At']
-PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At','Segment']
+ONGOING_HEADERS=['Order Number','Material Type','Material Code','Description','Batch','Order Quantity','Basic Start Date','Expected End Date','Expected FG Quantity','Estimate Basis','Last Saved By','Last Saved At (IST)']
+PLAN_HEADERS=['Product Name','Description','Batch','Quantity','Start Date','End Date','Last Saved By','Last Saved At (IST)','Segment']
 
 def day(v):
     if isinstance(v,datetime):return v.date()
@@ -40,7 +42,7 @@ def order_key(r):return hashlib.sha256(json.dumps([ident(r.get('Order')),ident(r
 def build(current):
     dataset=current['data'];ref=day(dataset.get('productionSnapshotDate'))
     basis='Production worksheet updated date'
-    if not ref:ref=datetime.fromtimestamp(current['updated_at'],timezone.utc).date();basis='Workbook upload date (worksheet date unavailable; refresh and re-upload to capture it)'
+    if not ref:ref=datetime.fromtimestamp(current['updated_at'],IST).date();basis='Workbook upload date (worksheet date unavailable; refresh and re-upload to capture it)'
     orders=records(dataset,'Production Order Details',['Order','Batch','Material Number','Material description','Order quantity (GMEIN)','Confirmed quantity (GMEIN)','Basic start date','Basic finish date'])
     moves=records(dataset,'Material Document List',['Material','Batch','Movement Type','Posting Date','Material Type'])
     types={};receipts={};released=set();released_qty={};seen_moves=set();bybatch={}
@@ -97,6 +99,8 @@ def build(current):
 
 
 def schema(store,db):
+    from .production_history import schema as history_schema
+    history_schema(store,db)
     store.run(db,"""CREATE TABLE IF NOT EXISTS production_shared (
         kind TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,revision INTEGER NOT NULL,
         updated_by TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL,PRIMARY KEY(kind,id))""")
@@ -106,7 +110,7 @@ def shared(store,actor):
         store.require(db,actor);schema(store,db)
         return [dict(r) for r in store.run(db,'SELECT * FROM production_shared ORDER BY updated_at DESC').fetchall()]
 
-def timestamp(v):return datetime.fromtimestamp(v,timezone.utc).isoformat()
+
 
 def read(store,actor):
     require_menu(store,actor,3);current=store.get_dataset(actor)
@@ -153,7 +157,10 @@ def read(store,actor):
             store.require(db,actor)
             for item in matched:
                 cursor=store.run(db,"UPDATE production_shared SET kind='upcoming_started' WHERE kind='upcoming' AND id=? AND revision=?",(item['id'],item['revision']))
-                if cursor.rowcount:store._log(db,actor.username,'production_plan_matched','Upcoming plan matched a production order',actor.session_id)
+                if cursor.rowcount:
+                    before=json.loads(next(r['payload'] for r in saved if r['kind']=='upcoming' and r['id']==item['id']))
+                    history_record(store,db,item['id'],'upcoming','Matched production order','System',{**before,'status':'Upcoming'},{**before,'status':'Production order exists'})
+                    store._log(db,actor.username,'production_plan_matched','Upcoming plan matched a production order',actor.session_id)
     matched_ids={item['id'] for item in matched}
     result['upcoming']=[item for item in result['upcoming'] if item['id'] not in matched_ids]
     return result
@@ -201,12 +208,16 @@ def save(store,actor,event):
         store.require(db,actor,permission=permission);store.require(db,actor,permission='menu_3');schema(store,db)
         dataset=store.run(db,"SELECT version FROM datasets WHERE id='current'").fetchone()
         if not dataset or dataset['version']!=current['version']:raise ValueError('The workbook changed. Refresh Production.')
+        old=store.run(db,'SELECT payload FROM production_shared WHERE kind=? AND id=?',(kind,key)).fetchone()
+        before=json.loads(old['payload']) if old else {'quantity':item['row'][8],'endDate':item['row'][7]} if kind=='ongoing' else {}
         now=time.time()
         if expected==0:
             cursor=store.run(db,'INSERT INTO production_shared(kind,id,payload,revision,updated_by,updated_at) VALUES(?,?,?,1,?,?) ON CONFLICT(kind,id) DO NOTHING',(kind,key,json.dumps(payload),actor.username,now))
         else:
             cursor=store.run(db,'UPDATE production_shared SET payload=?,revision=revision+1,updated_by=?,updated_at=? WHERE kind=? AND id=? AND revision=?',(json.dumps(payload),actor.username,now,kind,key,expected))
         if cursor.rowcount!=1:raise ValueError('Someone else changed this row. Refresh Production before saving again.')
+        context={'materialCode':item['row'][2],'batch':item['row'][4]} if kind=='ongoing' else {}
+        history_record(store,db,key,kind,'Created' if expected==0 and kind=='upcoming' else 'Edited',actor.username,{**before,**context},{**payload,**context})
         store._log(db,actor.username,'production_plan_saved',kind,actor.session_id)
     return read(store,actor)
 
@@ -244,3 +255,21 @@ def check_availability(store,actor,event):
         if not latest or latest['version']!=report['version'] or not plan or plan['revision']!=item['revision']:
             raise ValueError('The workbook or plan changed. Refresh Production and check again.')
     return {**result,'version':report['version'],'id':item['id'],'revision':item['revision'],'materialCode':item['materialCode'],'quantity':item['row'][3]}
+
+
+def delete(store,actor,event):
+    require_menu(store,actor,3);store.require_permission(actor,'edit_upcoming')
+    key=event.get('plan_id');revision=event.get('revision')
+    if not isinstance(key,str) or not re.fullmatch('[a-f0-9]{32}',key) or type(revision) is not int or revision<1:raise ValueError('Invalid saved plan selection.')
+    with store.transaction() as db:
+        store.require(db,actor,permission='edit_upcoming');store.require(db,actor,permission='menu_3');schema(store,db)
+        current=store.run(db,"SELECT version FROM datasets WHERE id='current'").fetchone()
+        if not current or current['version']!=event.get('version'):raise ValueError('The workbook changed. Refresh Production before deleting.')
+        row=store.run(db,"SELECT payload FROM production_shared WHERE kind='upcoming' AND id=? AND revision=?",(key,revision)).fetchone()
+        if not row:raise ValueError('This plan changed or was removed. Refresh Production.')
+        # Soft-delete keeps history available to every authorised viewer.
+        cursor=store.run(db,"UPDATE production_shared SET kind='upcoming_deleted',revision=revision+1,updated_by=?,updated_at=? WHERE kind='upcoming' AND id=? AND revision=?",(actor.username,time.time(),key,revision))
+        if cursor.rowcount!=1:raise ValueError('Someone else changed this plan. Refresh Production.')
+        history_record(store,db,key,'upcoming','Deleted',actor.username,json.loads(row['payload']),{})
+        store._log(db,actor.username,'production_plan_deleted','Upcoming plan',actor.session_id)
+    return read(store,actor)

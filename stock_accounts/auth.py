@@ -7,7 +7,7 @@ from .store import Store,AccessDenied
 
 APP_TITLE='Stock & Planning'
 from .access import MENU_LABELS
-PERMISSION_LABELS={'download': 'Download / export data', 'update_data': 'Upload and replace shared workbook', 'use_tools': 'Use Ask AI and Insights (share relevant records with Gemini)', 'edit_production':'Edit ongoing production expected quantity and end date', 'edit_upcoming':'Add and edit shared upcoming production plans', **{'menu_'+str(i):'Open '+label for i,label in enumerate(MENU_LABELS)}}
+PERMISSION_LABELS={'download': 'Download / export data', 'update_data': 'Upload and replace shared workbook', 'use_tools': 'Use Ask AI and Insights (share relevant records with Gemini)', 'edit_production':'Edit ongoing production expected quantity and end date', 'edit_upcoming':'Add, edit and delete shared upcoming production plans', **{'menu_'+str(i):'Open '+label for i,label in enumerate(MENU_LABELS)}}
 @st.cache_resource
 def initialize(url,username,password,store_revision="2026-10-17-access-rights-v2"):
     # The revision invalidates pre-deployment cached Store instances.
@@ -43,7 +43,8 @@ def require_permission(store,actor,permission):
     return store.require_permission(actor,permission)
 
 def format_time(value):
-    return datetime.fromtimestamp(value,tz=timezone.utc).strftime('%d %b %Y %H:%M:%S UTC') if value else 'Not recorded'
+    from .clock import display
+    return display(value) if value else 'Not recorded'
 
 def user_page(store,actor):
     require_admin(store,actor)
@@ -101,7 +102,7 @@ def user_page(store,actor):
                 st.success('Account updated. Existing sessions have been revoked.');st.rerun()
             except ValueError as exc:st.error(str(exc))
     st.subheader('Access log')
-    st.caption('Events start when this update is deployed. Times are UTC. Assessment contents and passwords are never logged.')
+    st.caption('Events start when this update is deployed. Times are IST. Assessment contents and passwords are never logged.')
     # Free text includes unknown usernames from failed login attempts.
     query=st.text_input('Filter log by exact username (optional)',key='audit_username').strip().lower()
     if st.button('Refresh access log'):st.rerun()
@@ -168,4 +169,4 @@ def admin_download(*args,**kwargs):
     if clicked:st.session_state._account_store.log_event(st.session_state.actor,'export','File download')
     return clicked
 
-PRODUCTION_ACCESS_REVISION=2
+PRODUCTION_ACCESS_REVISION=3

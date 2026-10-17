@@ -248,3 +248,21 @@ and batch match Production Order Details. Matching ignores surrounding spaces
 and letter case, never matches on material or batch alone, retains the saved
 history/audit trail, and keeps archived plans out of future upcoming lists even
 when a later SAP dump omits older orders.
+
+### Shared edits, deletion and IST history
+
+Upcoming plans offer Edit and Delete actions to administrators and viewers with
+`edit_upcoming` access. Delete requires confirmation and soft-deletes the shared
+plan so it disappears for everyone; it retains the record and history. Delete
+rechecks the workbook version, plan revision and permissions to prevent deleting
+someone else's intervening edit.
+
+The Edit history tab is readable by users with Production section access. It
+shows the latest 500 history events, with username, action, material/batch,
+changed field, previous/new values and an IST timestamp. Creating/editing/deleting
+plans and automatic production-order matches write history in the same database
+transaction as the change. Detailed history starts with this deployment; earlier
+before/after values cannot be recovered. Internal timestamps remain absolute
+instants; production saved times, history, account logs, upload times and Insights
+generation times are explicitly displayed in Asia/Kolkata (IST), independent of
+the viewer's browser/server timezone. Date-only planning dates are unchanged.

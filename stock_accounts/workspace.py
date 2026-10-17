@@ -41,6 +41,12 @@ def handle_request(store,actor,event):
     identity=store.identity(actor)
     action=event.get("action")
     from .access import require_menu
+    if action=='production_history':
+        from .production_history import read as history
+        return history(store,actor,event)
+    if action=='production_delete':
+        from .production import delete
+        return delete(store,actor,event)
     if action=='production_availability':
         from .production import check_availability
         return check_availability(store,actor,event)
