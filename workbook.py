@@ -35,6 +35,19 @@ def read_upload(data,filename):
     names=validate_zip(data)
     wb=load_workbook(io.BytesIO(data),read_only=True,data_only=True)
     sheets=[]
+    snapshot=None
+    if 'Production Data' in wb.sheetnames:
+        import re
+        from datetime import datetime,date
+        for values in wb['Production Data'].iter_rows(min_row=1,max_row=5,values_only=True):
+            for value in values:
+                if isinstance(value,(datetime,date)):snapshot=value.date().isoformat() if isinstance(value,datetime) else value.isoformat()
+                elif isinstance(value,str):
+                    match=re.search(r'(\d{2}[-/]\d{2}[-/]\d{4})',value)
+                    if match:
+                        try:snapshot=datetime.strptime(match.group(1).replace('/','-'),'%d-%m-%Y').date().isoformat()
+                        except ValueError:pass
+
     try:
         for name,header,first,last,fill in SPECS:
             if name not in wb.sheetnames:
@@ -78,7 +91,7 @@ def read_upload(data,filename):
             validate_model(tables)
         finally:
             if path:os.unlink(path)
-    return {"filename":filename,"workbookHash":hashlib.sha256(data).hexdigest(),"sheets":sheets,"tables":tables}
+    return {"filename":filename,"workbookHash":hashlib.sha256(data).hexdigest(),"sheets":sheets,"tables":tables,"productionSnapshotDate":snapshot}
 
 def validate_model(tables):
     if not isinstance(tables,list) or len(tables)>60:raise ValueError("Invalid model tables.")
@@ -168,3 +181,5 @@ def related_tables(tables,code,entire=False):
             original=next(x for x in tables if x["name"]=="Calendar");di=original["headers"].index("Date")
             t["rows"]=[r for r in original["rows"] if str(r[di])[:10] in dates]
     return out
+
+PRODUCTION_REVISION=1

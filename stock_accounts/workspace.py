@@ -10,12 +10,15 @@ from workbook import read_upload,SPECS,segment_map
 
 _component=components.declare_component("stock_planning_web_ui",path=str(Path(__file__).resolve().parents[1]/"frontend_dist"))
 
-def ui_payload(current):
+def ui_payload(current,identity=None):
+    from .access import allowed
     if current:
         dataset=current["data"]
+        if identity:
+            dataset={**dataset,'sheets':[{**sheet,'rows':sheet['rows'] if allowed(identity,i) else []} for i,sheet in enumerate(dataset['sheets'])]}
         mapping=segment_map(dataset.get("tables",[]))
-        return {"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
-    return {"filename":"No workbook uploaded yet","updatedAt":None,"asOf":"—","sheets":[{"name":s[0],"headers":["Material","Description"],"rows":[]} for s in SPECS],"segmentMap":{}},[],"empty"
+        return {"accessibleTabs":[i for i in range(9) if not identity or allowed(identity,i)],"filename":current["filename"],"updatedAt":datetime.fromtimestamp(current["updated_at"],tz=timezone.utc).isoformat(),"asOf":"Saved Excel results","sheets":dataset["sheets"],"segmentMap":{k:sorted(v) for k,v in mapping.items()}},dataset.get("tables",[]),current["version"]
+    return {"accessibleTabs":[i for i in range(9) if not identity or allowed(identity,i)],"filename":"No workbook uploaded yet","updatedAt":None,"asOf":"—","sheets":[{"name":s[0],"headers":["Material","Description"],"rows":[]} for s in SPECS],"segmentMap":{}},[],"empty"
 
 def workspace_payload(store,actor):
     # Check authorization and the shared version even when a session has cached data.
@@ -25,10 +28,11 @@ def workspace_payload(store,actor):
         store.require(db,actor)
         row=store.run(db,"SELECT version,updated_at FROM datasets WHERE id='current'").fetchone()
         revision=(row['version'],row['updated_at']) if row else None
-    key=(actor.username,actor.session_id,revision)
+    identity=store.identity(actor)
+    key=(actor.username,actor.session_id,revision,str(identity['permissions']))
     cached=st.session_state.get('_workspace_payload')
     if not cached or cached[0]!=key:
-        cached=(key,ui_payload(store.get_dataset(actor)))
+        cached=(key,ui_payload(store.get_dataset(actor),identity))
         st.session_state['_workspace_payload']=cached
     return cached[1]
 
@@ -36,6 +40,22 @@ def handle_request(store,actor,event):
     """Never trust frontend visibility or a client-supplied role."""
     identity=store.identity(actor)
     action=event.get("action")
+    from .access import require_menu
+    if action in ('production_status','production_save'):
+        from .production import read,save
+        return read(store,actor) if action=='production_status' else save(store,actor,event)
+    if action in ('planning_status','planning_calculate'):require_menu(store,actor,6)
+    if action=='planning_table_export':require_menu(store,actor,5 if event.get('source')=='forecast_purchasing' else 6)
+    if action=='matched_export':
+        index=event.get('tab')
+        if type(index) is not int or not 0<=index<7:raise ValueError('Invalid section.')
+        require_menu(store,actor,index)
+    if action in ('ask_ai','ai_clear','ai_export'):require_menu(store,actor,7)
+    if action=='ai_status':
+        from .access import allowed
+        if not (allowed(identity,7) or allowed(identity,8)):require_menu(store,actor,7)
+    if action in ('generate_insights','insight_records'):require_menu(store,actor,8)
+
     if action=="planning_table_export":
         from .planning import export_planning_table
         return export_planning_table(store,actor,event)
@@ -57,6 +77,7 @@ def handle_request(store,actor,event):
     if action=="view":
         index=event.get("tab")
         if type(index) is not int or not 0<=index<len(SPECS):raise ValueError("Unknown view.")
+        require_menu(store,actor,index)
         store.record_access(actor,SPECS[index][0]);return {"ok":True}
     if action=="export":
         store.log_event(actor,"export","Table export");return {"ok":True}

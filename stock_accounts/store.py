@@ -4,7 +4,7 @@ import base64, contextlib, gzip, hashlib, hmac, json, os, re, sqlite3, time, uui
 from dataclasses import dataclass
 
 ITERATIONS = 600_000
-DEFAULT_PERMISSIONS = {"download": False, "update_data": False, "use_tools": True}
+DEFAULT_PERMISSIONS = {"download":False,"update_data":False,"use_tools":True,"edit_production":False,"edit_upcoming":False,**{'menu_'+str(i):True for i in range(9)}}
 class AccessDenied(PermissionError):
     pass
 @dataclass(frozen=True)

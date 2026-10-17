@@ -1,9 +1,15 @@
 from __future__ import annotations
-import os,time,logging
+import os,time,logging,importlib
 from datetime import datetime,timezone
 import pandas as pd
 import streamlit as st
 from stock_accounts.store import Store,Actor,AccessDenied
+# Update permission defaults even for Store objects cached before this deployment.
+from stock_accounts import store as _account_module
+from stock_accounts.access import PERMISSION_DEFAULTS
+_account_module.DEFAULT_PERMISSIONS.update(PERMISSION_DEFAULTS)
+import workbook as _workbook
+if getattr(_workbook,'PRODUCTION_REVISION',0)!=1:importlib.reload(_workbook)
 from workbook import read_upload,TITLES,SPECS,forecast_summary,segment_map,segment_filter,related_tables
 from tables import table_controls
 # Streamlit may retain helper modules across a source update. Reload only an
@@ -15,13 +21,15 @@ for _module in (_grounded_ai,_insights,_assistant,_workspace):
     if getattr(_module,'INSIGHTS_REVISION',0)!=3:
         importlib.reload(_module)
 # Refresh the dispatcher when an already-running process gains planning RPCs.
-if getattr(_workspace,'PLANNING_REVISION',0)!=3:
+if getattr(_workspace,'PLANNING_REVISION',0)!=4:
     importlib.reload(_workspace)
 from stock_accounts import planning as _planning, matched_export as _matched_export
 for _module in (_planning,_matched_export):
     if getattr(_module,'TABLE_EXPORT_REVISION',0)!=1:
         importlib.reload(_module)
 from stock_accounts.workspace_insights import render_exact_workspace,process_account_navigation,account_page_style
+from stock_accounts import auth as _account_auth
+if getattr(_account_auth,'PRODUCTION_ACCESS_REVISION',0)!=1:importlib.reload(_account_auth)
 from stock_accounts.auth import user_page as account_admin_page,password_page,initialize as initialize_account_store
 
 st.set_page_config(page_title="Stock & Planning",page_icon="📦",layout="wide")

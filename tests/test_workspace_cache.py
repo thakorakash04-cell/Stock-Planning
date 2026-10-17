@@ -4,7 +4,7 @@ from stock_accounts.workspace import workspace_payload
 from stock_accounts.store import AccessDenied
 
 def test_payload_reuses_same_revision_and_refreshes_on_shared_update():
-    store=Mock();actor=Mock(username='viewer',session_id='session')
+    store=Mock();store.identity.return_value={'role':'viewer','permissions':{}};actor=Mock(username='viewer',session_id='session')
     store.transaction=MagicMock()
     store.run.return_value.fetchone.return_value={'version':'v1','updated_at':1}
     del store.dataset_revision

@@ -169,3 +169,40 @@ when navigating to another worksheet, Ask AI or Insights and returning during
 the same login. Signing out, loading a newer workbook, choosing Clear plan or
 reloading planning materials starts a new plan. Browser reloads start a new
 in-memory view.
+
+## Production workspace
+
+Production now contains four independently collapsible tables: the existing
+completed/QC-released worksheet, ongoing orders, batches under QC release, and
+shared upcoming production plans.
+
+* **Under QC release:** match material **and batch**, restrict to FG/SFG types,
+  require movement 101 and no 321 through the snapshot date, then use the latest
+  101 posting date. The window includes the reference month and four preceding
+  calendar months. Quantities come from matching production order records;
+  unmatched quantities stay blank.
+* **Ongoing:** confirmed quantity must equal zero; Basic start date must lie in
+  the reference month or preceding month, no later than the snapshot date.
+  Expected end date starts from Basic finish date. Expected FG uses median
+  positive 321 receiving quantity / order quantity from up to ten completed,
+  QC-released batches of the exact same material (same product size). Order
+  quantities within ±25% are prioritised; otherwise all sizes for that material
+  are used and labelled. SAP's negative 321 QC outflow is excluded to avoid
+  cancelling the corresponding positive unrestricted-stock inflow. If no usable
+  history exists, no quantity is invented. Estimates remain planning assumptions.
+* **Reference date:** the dated header in the first five rows of Production Data
+  is captured on workbook upload. Earlier uploads fall back to their upload date
+  and show that fallback explicitly. Re-upload the refreshed workbook once to
+  capture its worksheet date.
+* **Shared changes:** expected FG quantity/end date overrides and upcoming plans
+  are stored in `production_shared` in the same persistent database. Viewers
+  start with edit access off. Manage users provides separate **Edit ongoing
+  production** and **Add/edit upcoming plans** rights. Saves recheck permissions
+  and dataset version, detect concurrent edits, and appear in the access log.
+  Other users see updates on refresh or the production screen's 60-second poll.
+* **Sidebar:** Manage users also controls each viewer's nine section permissions.
+  Restricted menus are hidden, their worksheet rows are removed from the UI
+  payload, and their view/tool/edit/export requests are denied server-side.
+  These control section access; underlying records may still be available in an
+  authorised section's drill-down or Ask AI context. Permission changes revoke
+  existing sessions, so the viewer signs in again for the new rights.

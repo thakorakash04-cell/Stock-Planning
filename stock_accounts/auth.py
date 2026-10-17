@@ -6,7 +6,8 @@ import streamlit as st
 from .store import Store,AccessDenied
 
 APP_TITLE='Stock & Planning'
-PERMISSION_LABELS={'download': 'Download / export data', 'update_data': 'Upload and replace shared workbook', 'use_tools': 'Use Ask AI (share relevant records with Gemini)'}
+from .access import MENU_LABELS
+PERMISSION_LABELS={'download': 'Download / export data', 'update_data': 'Upload and replace shared workbook', 'use_tools': 'Use Ask AI and Insights (share relevant records with Gemini)', 'edit_production':'Edit ongoing production expected quantity and end date', 'edit_upcoming':'Add and edit shared upcoming production plans', **{'menu_'+str(i):'Open '+label for i,label in enumerate(MENU_LABELS)}}
 @st.cache_resource
 def initialize(url,username,password,store_revision="2026-10-15-login-fix"):
     # The revision invalidates pre-deployment cached Store instances.
@@ -67,7 +68,7 @@ def user_page(store,actor):
         user=next(u for u in viewers if u['username']==selected)
         with st.form('permissions_'+selected):
             st.subheader('Access rights')
-            st.caption('Every active account can view the workspace. Grant additional actions individually; account management always remains admin-only.')
+            st.caption('Choose the sections this viewer can open and the actions they can perform. Production edits are shared with everyone who can open Production.')
             permissions={key:st.checkbox(label,value=user['permissions'].get(key,False),key='permission_'+selected+'_'+key) for key,label in PERMISSION_LABELS.items()}
             save=st.form_submit_button('Save access rights',type='primary')
         if save:
@@ -150,3 +151,5 @@ def admin_download(*args,**kwargs):
     clicked=st.download_button(*args,**kwargs)
     if clicked:st.session_state._account_store.log_event(st.session_state.actor,'export','File download')
     return clicked
+
+PRODUCTION_ACCESS_REVISION=1
